@@ -1,0 +1,32 @@
+namespace: lattice
+
+postgresql:
+  user: lattice
+  password: change-me
+  database: lattice
+  host: lattice-db
+  port: 5432
+
+backend:
+  replicaCount: 1
+  image: 192.168.1.20:5000/lattice-backend:latest
+  service:
+    type: ClusterIP
+    port: 8000
+
+agent:
+  image: 192.168.1.20:5000/lattice-agent:latest
+  ebpf:
+    enabled: true
+    privileged: true
+
+frontend:
+  replicaCount: 1
+  image: 192.168.1.20:5000/lattice-frontend:latest
+  service:
+    type: ClusterIP
+    port: 80
+
+admin:
+  username: admin
+  password: change-me-admin

@@ -1,0 +1,36 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: lattice-agent-role
+rules:
+- apiGroups: [""]
+  resources: ["pods", "nodes", "services", "endpoints"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: lattice-discovery-binding
+subjects:
+- kind: ServiceAccount
+  name: lattice-agent-sa
+  namespace: {{ .Values.namespace }}
+- kind: ServiceAccount
+  name: lattice-backend-sa
+  namespace: {{ .Values.namespace }}
+roleRef:
+  kind: ClusterRole
+  name: lattice-agent-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: lattice-agent-sa
+  namespace: {{ .Values.namespace }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: lattice-backend-sa
+  namespace: {{ .Values.namespace }}
