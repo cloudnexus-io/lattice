@@ -1,6 +1,6 @@
 # Lattice - Kubernetes Observability Platform
 
-A cyberpunk-themed Kubernetes observability dashboard that provides real-time insights into cluster health, network flows, and pod status.
+A modern, scalable Kubernetes observability platform powered by eBPF that provides real-time insights into cluster health, network flows, and pod status.
 
 ![Lattice Overview](./docs/screenshots/overview.png)
 
