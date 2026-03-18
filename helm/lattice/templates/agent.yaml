@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: lattice-agent
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: lattice-agent
+  template:
+    metadata:
+      labels:
+        app: lattice-agent
+    spec:
+      serviceAccountName: lattice-agent-sa
+      hostPID: true
+      containers:
+      - name: agent
+        image: {{ .Values.agent.image }}
+        securityContext:
+          privileged: {{ .Values.agent.ebpf.privileged }}
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: LATTICE_BACKEND_URL
+          value: "http://lattice-backend:{{ .Values.backend.service.port }}"
+        volumeMounts:
+        - name: sys
+          mountPath: /sys
+          readOnly: true
+        - name: modules
+          mountPath: /lib/modules
+          readOnly: true
+        - name: debug
+          mountPath: /sys/kernel/debug
+        - name: usr-src
+          mountPath: /usr/src
+          readOnly: true
+      volumes:
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: modules
+        hostPath:
+          path: /lib/modules
+      - name: debug
+        hostPath:
+          path: /sys/kernel/debug
+      - name: usr-src
+        hostPath:
+          path: /usr/src
