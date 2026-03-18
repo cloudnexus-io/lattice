@@ -3,7 +3,7 @@ import axios from 'axios';
 import { 
   Lock, Server, Shield, Activity, Plus, LogOut, Search, 
   Cpu, Database, Globe, AlertTriangle, CheckCircle2,
-  Terminal as TerminalIcon, Menu, X, Edit, Network, Layers
+  Terminal as TerminalIcon, Menu, X, Edit, Network, Layers, ShieldAlert, RefreshCw
 } from 'lucide-react';
 import ReactFlow, { Background, Controls } from 'reactflow';
 import 'reactflow/dist/style.css';
@@ -52,18 +52,79 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('Overview');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [securityData, setSecurityData] = useState({ 
+    events: [], 
+    alerts: [], 
+    drift: null, 
+    dns: {}, 
+    sensitive: [],
+    baseline: { learning_enabled: false, status: 'inactive', paths_captured: 0, processes_captured: 0 }
+  });
+  const [selectedSecurityDetail, setSelectedSecurityDetail] = useState(null);
 
   useEffect(() => {
     if (token) {
       fetchTopology();
       fetchFlows();
+      fetchSecurityData();
       const interval = setInterval(() => {
         fetchTopology();
         fetchFlows();
       }, 5000);
-      return () => clearInterval(interval);
+      const securityInterval = setInterval(fetchSecurityData, 3000);
+      return () => {
+        clearInterval(interval);
+        clearInterval(securityInterval);
+      };
     }
   }, [token]);
+
+  const fetchSecurityData = async () => {
+    try {
+      const headers = { headers: { Authorization: `Bearer ${token}` } };
+      const [eventsRes, alertsRes, driftRes, dnsRes, sensitiveRes, baselineRes] = await Promise.all([
+        axios.get(`${API_BASE}/security/events`, headers),
+        axios.get(`${API_BASE}/security/alerts`, headers),
+        axios.get(`${API_BASE}/security/drift`, headers),
+        axios.get(`${API_BASE}/security/dns-threats`, headers),
+        axios.get(`${API_BASE}/security/sensitive-access`, headers),
+        axios.get(`${API_BASE}/security/baseline`, headers),
+      ]);
+      setSecurityData(prev => ({
+        ...prev,
+        events: eventsRes.data.events || [],
+        alerts: alertsRes.data.alerts || [],
+        drift: driftRes.data,
+        dns: dnsRes.data,
+        sensitive: sensitiveRes.data.events || [],
+        baseline: baselineRes.data || prev.baseline,
+      }));
+    } catch (err) {
+      console.error('Failed to fetch security data:', err);
+    }
+  };
+
+  const toggleBaselineLearning = async () => {
+    try {
+      const newState = !securityData.baseline.learning_enabled;
+      await axios.put(
+        `${API_BASE}/security/baseline`,
+        { learning_enabled: newState },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setSecurityData(prev => ({
+        ...prev,
+        baseline: {
+          ...prev.baseline,
+          learning_enabled: newState,
+          status: newState ? 'learning' : 'inactive',
+          learning_start_time: newState ? new Date().toISOString() : null,
+        }
+      }));
+    } catch (err) {
+      console.error('Failed to toggle baseline learning:', err);
+    }
+  };
 
   const fetchTopology = async () => {
     try {
@@ -367,6 +428,7 @@ export default function App() {
            <NavItem icon={<Layers size={22}/>} active={activeTab === 'Pods'} onClick={() => setActiveTab('Pods')} label="Active_Pods" open={sidebarOpen} />
            <NavItem icon={<Globe size={22}/>} active={activeTab === 'Topology'} onClick={() => setActiveTab('Topology')} label="Grid_Map" open={sidebarOpen} />
            <NavItem icon={<Cpu size={22}/>} active={activeTab === 'Flows'} onClick={() => setActiveTab('Flows')} label="Flow_Matrix" open={sidebarOpen} />
+           <NavItem icon={<ShieldAlert size={22}/>} active={activeTab === 'Security'} onClick={() => setActiveTab('Security')} label="Security_View" open={sidebarOpen} />
            <div className="mt-auto px-6 opacity-30 italic flex items-center gap-3">
               <TerminalIcon size={16} />
               {sidebarOpen && <span className="text-[9px] font-black uppercase tracking-widest">Session_Active: root</span>}
@@ -684,6 +746,481 @@ export default function App() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'Security' && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-end mb-4 border-l-4 border-red-500 pl-6">
+                   <div>
+                      <h1 className="text-4xl font-black text-white uppercase italic tracking-tighter">Security_View</h1>
+                      <p className="text-xs text-red-500 font-black uppercase tracking-[0.3em] opacity-60 italic">eBPF-powered runtime security monitoring</p>
+                   </div>
+                   <div className="flex items-center gap-3">
+                      <button 
+                        onClick={fetchSecurityData}
+                        className="flex items-center gap-2 px-4 py-2 bg-cyber-neon/10 border border-cyber-neon/30 rounded-lg text-[10px] font-bold uppercase tracking-wider text-cyber-neon hover:bg-cyber-neon/20 transition-colors">
+                        <RefreshCw size={12} />
+                        Refresh
+                      </button>
+                     <button className="flex items-center gap-2 px-4 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-[10px] font-bold uppercase tracking-wider text-red-500 hover:bg-red-500/20 transition-colors">
+                       <ShieldAlert size={12} />
+                       Configure
+                     </button>
+                   </div>
+                </div>
+
+                <div className="grid grid-cols-4 gap-4">
+                  <div 
+                    onClick={() => setSelectedSecurityDetail('total')}
+                    className="p-6 rounded-xl border bg-cyber-card backdrop-blur-sm border-cyber-accent/20 hover:scale-[1.02] transition-all cursor-pointer hover:border-cyber-neon/50"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 rounded-lg bg-cyber-accent/10 border border-cyber-accent/20">
+                        <Shield size={20} className="text-cyber-accent" />
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-cyber-accent/60 italic">Total_Events</div>
+                        <div className="text-2xl font-black tracking-tighter text-white">{securityData.events.length}</div>
+                        <div className="text-[8px] font-bold uppercase tracking-tighter opacity-40 mt-1">Security_Monitored</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div 
+                    onClick={() => setSelectedSecurityDetail('critical')}
+                    className="p-6 rounded-xl border bg-cyber-card backdrop-blur-sm border-red-500/20 hover:scale-[1.02] transition-all cursor-pointer hover:border-red-500/50"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                        <AlertTriangle size={20} className="text-red-500" />
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-red-500/60 italic">Critical</div>
+                        <div className="text-2xl font-black tracking-tighter text-red-500">{securityData.events.filter(e => e.severity === 'CRITICAL').length}</div>
+                        <div className="text-[8px] font-bold uppercase tracking-tighter opacity-40 mt-1">Immediate_Action</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div 
+                    onClick={() => setSelectedSecurityDetail('high')}
+                    className="p-6 rounded-xl border bg-cyber-card backdrop-blur-sm border-orange-500/20 hover:scale-[1.02] transition-all cursor-pointer hover:border-orange-500/50"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                        <Lock size={20} className="text-orange-500" />
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-orange-500/60 italic">High_Alerts</div>
+                        <div className="text-2xl font-black tracking-tighter text-orange-500">{securityData.events.filter(e => e.severity === 'HIGH').length}</div>
+                        <div className="text-[8px] font-bold uppercase tracking-tighter opacity-40 mt-1">Requires_Attention</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div 
+                    onClick={() => setSelectedSecurityDetail('drift')}
+                    className="p-6 rounded-xl border bg-cyber-card backdrop-blur-sm border-yellow-500/20 hover:scale-[1.02] transition-all cursor-pointer hover:border-yellow-500/50"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                        <Activity size={20} className="text-yellow-500" />
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-yellow-500/60 italic">Baseline_Drift</div>
+                        <div className="text-2xl font-black tracking-tighter text-yellow-500">{securityData.drift?.total_drifts || 0}</div>
+                        <div className="text-[8px] font-bold uppercase tracking-tighter opacity-40 mt-1">Deviations_Detected</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {selectedSecurityDetail && (
+                  <div className="mt-6 p-6 rounded-xl border bg-cyber-card/95 backdrop-blur-sm border-cyber-neon/30">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
+                        {selectedSecurityDetail === 'total' && <><Shield size={16} className="text-cyber-accent" /> ALL_SECURITY_EVENTS</>}
+                        {selectedSecurityDetail === 'critical' && <><AlertTriangle size={16} className="text-red-500" /> CRITICAL_ALERTS</>}
+                        {selectedSecurityDetail === 'high' && <><Lock size={16} className="text-orange-500" /> HIGH_PRIORITY_ALERTS</>}
+                        {selectedSecurityDetail === 'drift' && <><Activity size={16} className="text-yellow-500" /> BASELINE_DRIFT_ANALYSIS</>}
+                      </h3>
+                      <button 
+                        onClick={() => setSelectedSecurityDetail(null)}
+                        className="text-cyber-accent/60 hover:text-white text-xl leading-none"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div className="max-h-96 overflow-y-auto">
+                      {selectedSecurityDetail === 'total' && (
+                        <div className="space-y-2">
+                          <div className="text-[10px] text-cyber-accent/60 mb-3">Showing all {securityData.events.length} events</div>
+                          {securityData.events.map((event, idx) => (
+                            <div key={event.event_id || idx} className="p-3 rounded-lg bg-black/20 border border-cyber-accent/10">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                                  event.severity === 'CRITICAL' ? 'bg-red-500/20 text-red-500' :
+                                  event.severity === 'HIGH' ? 'bg-orange-500/20 text-orange-500' :
+                                  event.severity === 'MEDIUM' ? 'bg-yellow-500/20 text-yellow-500' :
+                                  'bg-cyber-accent/20 text-cyber-accent'
+                                }`}>{event.severity}</span>
+                                <span className="text-[10px] text-white/80">{event.event_type}</span>
+                              </div>
+                              <div className="text-[9px] text-cyber-accent/50">
+                                {event.namespace}/{event.pod_name} • {event.comm} • {event.timestamp?.split('T')[1]?.split('.')[0] || 'unknown'}
+                              </div>
+                              {event.path && <div className="text-[8px] text-cyber-accent/40 mt-1 font-mono">Path: {event.path}</div>}
+                              {event.src_ip && <div className="text-[8px] text-cyber-accent/40 font-mono">{event.src_ip} → {event.dst_ip}:{event.dst_port}</div>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {selectedSecurityDetail === 'critical' && (
+                        <div className="space-y-2">
+                          {securityData.events.filter(e => e.severity === 'CRITICAL').length === 0 ? (
+                            <div className="text-center py-8 text-cyber-accent/40">
+                              <Shield size={32} className="mx-auto mb-2" />
+                              <p>No critical alerts</p>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="text-[10px] text-red-500/60 mb-3">{securityData.events.filter(e => e.severity === 'CRITICAL').length} critical alerts require immediate action</div>
+                              {securityData.events.filter(e => e.severity === 'CRITICAL').map((event, idx) => (
+                                <div key={event.event_id || idx} className="p-4 rounded-lg bg-red-500/5 border border-red-500/20">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <AlertTriangle size={14} className="text-red-500" />
+                                    <span className="text-xs font-bold text-red-400">{event.event_type?.replace(/_/g, ' ')}</span>
+                                  </div>
+                                  <div className="text-[10px] text-white/70 mb-2">
+                                    {event.namespace}/{event.pod_name} • {event.comm}
+                                  </div>
+                                  {event.details && (
+                                    <div className="text-[9px] font-mono text-cyber-accent/60 bg-black/30 p-2 rounded">
+                                      {event.path || JSON.stringify(event.details)}
+                                    </div>
+                                  )}
+                                  <div className="text-[8px] text-red-500/50 mt-2">{event.timestamp?.split('T')[1]?.split('.')[0] || 'unknown'}</div>
+                                </div>
+                              ))}
+                            </>
+                          )}
+                        </div>
+                      )}
+                      {selectedSecurityDetail === 'high' && (
+                        <div className="space-y-2">
+                          {securityData.events.filter(e => e.severity === 'HIGH').length === 0 ? (
+                            <div className="text-center py-8 text-cyber-accent/40">
+                              <Lock size={32} className="mx-auto mb-2" />
+                              <p>No high priority alerts</p>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="text-[10px] text-orange-500/60 mb-3">{securityData.events.filter(e => e.severity === 'HIGH').length} high priority alerts</div>
+                              {securityData.events.filter(e => e.severity === 'HIGH').map((event, idx) => (
+                                <div key={event.event_id || idx} className="p-4 rounded-lg bg-orange-500/5 border border-orange-500/20">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Lock size={14} className="text-orange-500" />
+                                    <span className="text-xs font-bold text-orange-400">{event.event_type?.replace(/_/g, ' ')}</span>
+                                  </div>
+                                  <div className="text-[10px] text-white/70 mb-2">
+                                    {event.namespace}/{event.pod_name} • {event.comm}
+                                  </div>
+                                  {event.details && (
+                                    <div className="text-[9px] font-mono text-cyber-accent/60 bg-black/30 p-2 rounded">
+                                      {event.path || JSON.stringify(event.details)}
+                                    </div>
+                                  )}
+                                  <div className="text-[8px] text-orange-500/50 mt-2">{event.timestamp?.split('T')[1]?.split('.')[0] || 'unknown'}</div>
+                                </div>
+                              ))}
+                            </>
+                          )}
+                        </div>
+                      )}
+                      {selectedSecurityDetail === 'drift' && (
+                        <div className="space-y-4">
+                          <div className="text-[10px] text-yellow-500/60 mb-3">Runtime drift analysis based on learned baseline</div>
+                          <div className="grid grid-cols-3 gap-4 mb-4">
+                            <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-center">
+                              <div className="text-xl font-black text-yellow-500">{securityData.drift?.total_drifts || 0}</div>
+                              <div className="text-[9px] text-yellow-500/60">Total Drifts</div>
+                            </div>
+                            <div className="p-3 rounded-lg bg-cyber-neon/10 border border-cyber-neon/20 text-center">
+                              <div className="text-xl font-black text-cyber-neon">{securityData.drift?.baseline_compliance || 100}%</div>
+                              <div className="text-[9px] text-cyber-neon/60">Compliance</div>
+                            </div>
+                            <div className="p-3 rounded-lg bg-cyber-accent/10 border border-cyber-accent/20 text-center">
+                              <div className="text-xl font-black text-cyber-accent">{securityData.drift?.containers?.length || 0}</div>
+                              <div className="text-[9px] text-cyber-accent/60">Containers</div>
+                            </div>
+                          </div>
+                          <div className="text-[10px] font-bold text-white/80 mb-2">CONTAINER DRIFT BREAKDOWN:</div>
+                          {securityData.drift?.containers?.map((container, idx) => (
+                            <div key={idx} className="p-3 rounded-lg bg-black/20 border border-yellow-500/10 mb-2">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-[10px] font-bold text-white/80">{container.name}</span>
+                                <span className="text-[9px] text-yellow-500/60">
+                                  {container.violations} violations / {container.accesses} accesses
+                                </span>
+                              </div>
+                              <div className="w-full h-2 bg-black/40 rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-gradient-to-r from-yellow-500 to-red-500 transition-all"
+                                  style={{ width: `${Math.min(100, (container.violations / container.accesses) * 100)}%` }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                          {(!securityData.drift?.containers || securityData.drift.containers.length === 0) && (
+                            <div className="text-center py-8 text-cyber-accent/40">
+                              <Activity size={32} className="mx-auto mb-2" />
+                              <p>No container drift data available</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="bg-cyber-card border border-cyber-accent/20 rounded-xl overflow-hidden">
+                    <div className="p-4 border-b border-cyber-accent/10 flex items-center gap-3">
+                      <ShieldAlert size={18} className="text-red-500" />
+                      <h2 className="text-sm font-black uppercase tracking-wider">Alert_Feed</h2>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyber-neon/20 text-cyber-neon border border-cyber-neon/30">
+                        {securityData.events.length} Events
+                      </span>
+                    </div>
+                    <div className="max-h-80 overflow-y-auto">
+                      {securityData.events.length === 0 ? (
+                        <div className="p-8 text-center text-cyber-accent/40">
+                          <Shield size={24} className="mx-auto mb-2 text-cyber-neon" />
+                          <p className="text-sm">No security events detected</p>
+                          <p className="text-[10px] mt-2 opacity-60">eBPF monitoring active</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-cyber-accent/10">
+                          {securityData.events.slice(0, 10).map((event, idx) => (
+                            <div key={event.event_id || idx} className="p-4 hover:bg-cyber-accent/5 transition-colors">
+                              <div className="flex items-start gap-3">
+                                <div className={`p-2 rounded-lg text-[9px] font-bold uppercase px-2 ${
+                                  event.severity === 'CRITICAL' ? 'bg-red-500/20 text-red-500 border border-red-500/30' :
+                                  event.severity === 'HIGH' ? 'bg-orange-500/20 text-orange-500 border border-orange-500/30' :
+                                  event.severity === 'MEDIUM' ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/30' :
+                                  'bg-cyber-accent/20 text-cyber-accent border border-cyber-accent/30'
+                                }`}>
+                                  {event.severity}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-xs font-bold text-white/80 truncate">{event.event_type?.replace(/_/g, ' ')}</div>
+                                  <div className="text-[10px] text-cyber-accent/60 mt-1">
+                                    {event.namespace && <span>{event.namespace} / </span>}
+                                    {event.pod_name || event.comm}
+                                  </div>
+                                  {event.details && (
+                                    <div className="mt-2 p-2 bg-black/20 rounded text-[9px] font-mono text-cyber-accent/60 truncate">
+                                      {event.path || JSON.stringify(event.details).slice(0, 80)}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="text-[9px] text-cyber-accent/40">
+                                  {event.timestamp?.split('T')[1]?.split('.')[0] || 'now'}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="bg-cyber-card border border-cyber-accent/20 rounded-xl overflow-hidden">
+                    <div className="p-4 border-b border-cyber-accent/10 flex items-center gap-3">
+                      <Activity size={18} className="text-orange-500" />
+                      <h2 className="text-sm font-black uppercase tracking-wider">Runtime_Drift_Status</h2>
+                    </div>
+                    <div className="p-4 space-y-4">
+                      <div className="flex items-center justify-between p-4 bg-black/20 rounded-lg border border-cyber-accent/10">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-3 h-3 rounded-full ${(securityData.drift?.total_drifts || 0) > 0 ? 'bg-orange-500 animate-pulse' : 'bg-cyber-neon'}`} />
+                          <span className="text-sm font-bold">{(securityData.drift?.total_drifts || 0) > 0 ? 'Drift_Detected' : 'Baseline_Normal'}</span>
+                        </div>
+                        <div className="text-2xl font-black text-cyber-neon">
+                          {securityData.drift?.baseline_compliance || 100}%
+                          <span className="text-[10px] text-cyber-accent/40 ml-1">compliant</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-black/20 rounded-lg border border-cyber-accent/10">
+                        <div>
+                          <div className="text-xs font-bold">Learning_Mode</div>
+                          <div className="text-[10px] text-cyber-accent/60">
+                            {securityData.baseline?.learning_enabled ? 'Capturing baseline...' : 'Capture baseline behavior'}
+                          </div>
+                          {securityData.baseline?.learning_enabled && (
+                            <div className="text-[9px] text-cyber-neon mt-1">
+                              {securityData.baseline.paths_captured || 0} paths, {securityData.baseline.processes_captured || 0} processes captured
+                            </div>
+                          )}
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input 
+                            type="checkbox" 
+                            className="sr-only peer" 
+                            checked={securityData.baseline?.learning_enabled || false}
+                            onChange={toggleBaselineLearning}
+                          />
+                          <div className={`w-11 h-6 rounded-full transition-all ${
+                            securityData.baseline?.learning_enabled 
+                              ? 'bg-cyber-neon/30 border-cyber-neon' 
+                              : 'bg-cyber-accent/20'
+                          } peer-focus:outline-none peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:rounded-full after:h-5 after:w-5 after:transition-all ${
+                            securityData.baseline?.learning_enabled 
+                              ? 'after:bg-cyber-neon' 
+                              : 'after:bg-cyber-accent'
+                          }`} />
+                        </label>
+                      </div>
+                      {securityData.baseline?.learning_enabled && (securityData.baseline.paths_captured > 0 || securityData.baseline.processes_captured > 0) && (
+                        <div className="mt-3 p-3 bg-cyber-neon/5 rounded-lg border border-cyber-neon/20">
+                          <div className="text-[10px] font-bold text-cyber-neon mb-2">BASELINE SNAPSHOT</div>
+                          {securityData.baseline.paths_captured > 0 && (
+                            <div className="mb-2">
+                              <div className="text-[9px] text-cyber-accent/60 mb-1">PATHS:</div>
+                              <div className="flex flex-wrap gap-1">
+                                {Array.isArray(securityData.baseline.baseline_paths) && securityData.baseline.baseline_paths.slice(0, 5).map((p, i) => (
+                                  <span key={i} className="text-[8px] px-1 py-0.5 bg-cyber-neon/10 rounded text-cyber-neon/80 font-mono">{p}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {securityData.baseline.processes_captured > 0 && (
+                            <div>
+                              <div className="text-[9px] text-cyber-accent/60 mb-1">PROCESSES:</div>
+                              <div className="flex flex-wrap gap-1">
+                                {Array.isArray(securityData.baseline.baseline_processes) && securityData.baseline.baseline_processes.slice(0, 5).map((p, i) => (
+                                  <span key={i} className="text-[8px] px-1 py-0.5 bg-purple-500/10 rounded text-purple-400/80 font-mono">{p}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="bg-cyber-card border border-cyber-accent/20 rounded-xl overflow-hidden">
+                    <div className="p-4 border-b border-cyber-accent/10 flex items-center gap-3">
+                      <Globe size={18} className="text-purple-500" />
+                      <h2 className="text-sm font-black uppercase tracking-wider">DNS_Threat_Analysis</h2>
+                    </div>
+                    <div className="p-4">
+                      <div className="grid grid-cols-3 gap-3 mb-4">
+                        <div className="p-3 bg-red-500/10 rounded-lg border border-red-500/20 text-center">
+                          <div className="text-xl font-black text-red-500">{securityData.dns?.high_entropy || 0}</div>
+                          <div className="text-[9px] text-red-500/60 uppercase">High_Entropy</div>
+                        </div>
+                        <div className="p-3 bg-orange-500/10 rounded-lg border border-orange-500/20 text-center">
+                          <div className="text-xl font-black text-orange-500">{securityData.dns?.nxdomain_rate || 0}%</div>
+                          <div className="text-[9px] text-orange-500/60 uppercase">NXDOMAIN</div>
+                        </div>
+                        <div className="p-3 bg-purple-500/10 rounded-lg border border-purple-500/20 text-center">
+                          <div className="text-xl font-black text-purple-500">{securityData.dns?.suspicious_tlds || 0}</div>
+                          <div className="text-[9px] text-purple-500/60 uppercase">Suspicious</div>
+                        </div>
+                      </div>
+                      {securityData.dns?.recent && securityData.dns.recent.length > 0 ? (
+                        <div className="space-y-2">
+                          {securityData.dns.recent.slice(0, 3).map((event, i) => (
+                            <div key={i} className="p-3 bg-black/20 rounded-lg border border-cyber-accent/10">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-[10px] font-bold text-purple-400">DNS_QUERY</span>
+                                <span className="text-[9px] text-cyber-accent/40">{event.details?.entropy || 0} entropy</span>
+                              </div>
+                              <div className="text-[9px] font-mono text-cyber-accent/60 truncate">{event.details?.query || 'Unknown query'}</div>
+                              <div className="text-[8px] text-red-500/60 mt-1">{event.details?.threat || 'Potential threat'}</div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-6 text-center text-cyber-accent/40 border border-dashed border-cyber-accent/20 rounded-lg">
+                          <Globe size={20} className="mx-auto mb-2 opacity-40" />
+                          <p className="text-xs">No suspicious DNS activity detected</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="bg-cyber-card border border-cyber-accent/20 rounded-xl overflow-hidden">
+                    <div className="p-4 border-b border-cyber-accent/10 flex items-center gap-3">
+                      <Lock size={18} className="text-red-500" />
+                      <h2 className="text-sm font-black uppercase tracking-wider">Sensitive_Path_Access</h2>
+                    </div>
+                    <div className="p-4">
+                      {securityData.sensitive && securityData.sensitive.length > 0 ? (
+                        <div className="space-y-2">
+                          {securityData.sensitive.slice(0, 5).map((event, i) => (
+                            <div key={i} className="p-2 rounded-lg border bg-red-500/5 border-red-500/20 flex items-center gap-2">
+                              <Lock size={12} className="text-red-500" />
+                              <span className="text-[9px] font-mono text-red-500/80">{event.path || 'Unknown path'}</span>
+                              <span className="text-[8px] text-cyber-accent/40 ml-auto">{event.comm}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2 mb-4">
+                          {['/etc/shadow', '169.254.169.254', '/run/secrets/', 'admin.conf'].map((path, i) => (
+                            <div key={i} className="p-2 rounded-lg border bg-red-500/5 border-red-500/20 flex items-center gap-2">
+                              <Lock size={12} className="text-red-500" />
+                              <span className="text-[9px] font-mono text-red-500/80">{path}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="p-6 text-center text-cyber-accent/40 border border-dashed border-cyber-accent/20 rounded-lg">
+                        <Lock size={20} className="mx-auto mb-2 opacity-40" />
+                        <p className="text-xs">{securityData.sensitive && securityData.sensitive.length > 0 ? `${securityData.sensitive.length} access attempt(s) detected` : 'No sensitive path access detected'}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-cyber-card border border-cyber-accent/20 rounded-xl overflow-hidden">
+                  <div className="p-4 border-b border-cyber-accent/10 flex items-center gap-3">
+                    <Network size={18} className="text-cyber-accent" />
+                    <h2 className="text-sm font-black uppercase tracking-wider">Security_Modules</h2>
+                  </div>
+                  <div className="p-4 grid grid-cols-2 gap-4">
+                    <div className="p-4 bg-black/20 rounded-lg border border-cyber-accent/10">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-2 h-2 rounded-full bg-cyber-neon animate-pulse" />
+                        <span className="text-sm font-bold">Socket-to-Process</span>
+                      </div>
+                      <p className="text-[10px] text-cyber-accent/60">TCP connection tracking with PID/TGID/comm correlation</p>
+                    </div>
+                    <div className="p-4 bg-black/20 rounded-lg border border-cyber-accent/10">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-2 h-2 rounded-full bg-cyber-neon animate-pulse" />
+                        <span className="text-sm font-bold">Runtime Drift Detection</span>
+                      </div>
+                      <p className="text-[10px] text-cyber-accent/60">Baseline learning and deviation detection</p>
+                    </div>
+                    <div className="p-4 bg-black/20 rounded-lg border border-cyber-accent/10">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-2 h-2 rounded-full bg-cyber-neon animate-pulse" />
+                        <span className="text-sm font-bold">DNS Threat Monitoring</span>
+                      </div>
+                      <p className="text-[10px] text-cyber-accent/60">High-entropy subdomain and C2 detection</p>
+                    </div>
+                    <div className="p-4 bg-black/20 rounded-lg border border-cyber-accent/10">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-2 h-2 rounded-full bg-cyber-neon animate-pulse" />
+                        <span className="text-sm font-bold">Sensitive Path Access</span>
+                      </div>
+                      <p className="text-[10px] text-cyber-accent/60">Cloud metadata and secrets monitoring</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
