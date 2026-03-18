@@ -2,65 +2,244 @@
 
 A modern, scalable Kubernetes observability platform powered by eBPF that provides real-time insights into cluster health, network flows, pod status, and runtime security monitoring.
 
-![Lattice Overview](./docs/screenshots/overview.png)
+![Lattice Overview](./docs/screenshots/overview-full.png)
+
+## Table of Contents
+
+- [Features](#features)
+  - [Overview Dashboard](#overview-dashboard)
+  - [Grid Map (Topology View)](#grid-map-topology-view)
+  - [Flow Matrix](#flow-matrix)
+  - [Security View](#security-view)
+- [Architecture](#architecture)
+- [Components](#components)
+- [Deployment](#deployment)
+- [API Endpoints](#api-endpoints)
+- [Security Features](#security-features)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+
+---
 
 ## Features
 
-### Security View (eBPF-Powered Runtime Security)
-Real-time security monitoring with intelligent threat detection:
+### Overview Dashboard
 
-- **Event Dashboard** - Clickable stat cards showing Total Events, Critical Alerts, High Alerts, and Baseline Drift
-- **Alert Feed** - Real-time security event stream with severity-based styling
-- **Runtime Drift Detection** - Baseline learning mode to capture normal behavior and detect anomalies
-- **DNS Threat Analysis** - Detection of high-entropy subdomains and suspicious TLDs
-- **Sensitive Path Access Monitoring** - Alerts for access to critical files like `/etc/shadow`, cloud metadata IPs, and Kubernetes secrets
-- **Security Modules Overview** - Visual status of all security monitoring components
+The Overview Dashboard provides a high-level summary of your Kubernetes cluster's health and activity:
 
-![Security View](./docs/screenshots/security-view.png)
+![Overview Dashboard](./docs/screenshots/overview-full.png)
+
+**Key Metrics:**
+- **Cluster Nodes** - Number of physical/virtual nodes in the cluster
+- **Active Pods** - Total count of running pods across all namespaces
+- **Traffic Flows** - Number of active network connections being monitored
+- **Security Posture** - Overall security status (Optimal/Degraded/Critical)
+
+**Components:**
+- **Recent Activity Stream** - Live feed of network connections with source/destination details
+- **Infrastructure Health** - Per-node health indicators with resource usage percentages
+
+**Interactive Features:**
+- Click on any metric card to see detailed breakdowns
+- Real-time updates every 5 seconds
+- Node health visualization with percentage indicators
+
+---
 
 ### Grid Map (Topology View)
-Visual representation of your Kubernetes cluster with:
-- **Namespace-based grouping** - Pods organized by namespace for easy navigation
-- **Pod restart detection** - Pods with high restart counts are highlighted with red/orange borders and "X RESTARTS" badges
-- **Node mapping** - Visual connections showing which pods run on which nodes
-- **Service awareness** - Different visual styling for pods vs services vs nodes
 
-![Grid Map](./docs/screenshots/grid-map.png)
+A visual representation of your entire Kubernetes cluster organized by namespace:
+
+![Grid Map](./docs/screenshots/grid-map-full.png)
+
+**Features:**
+- **Namespace-based grouping** - Pods organized into collapsible namespace sections
+- **Pod visualization** - Each pod displayed as a card with name and type
+- **Node mapping** - Visual connections showing pod-to-node relationships
+- **Service awareness** - Different visual styling for:
+  - **Pods** - Standard container workloads
+  - **Services** - Kubernetes service abstractions
+  - **Nodes** - Physical/virtual cluster nodes
+
+**Restart Detection:**
+Pods with high restart counts are automatically highlighted:
+- **Red border intensity** scales with restart count severity
+- **"X RESTARTS" badge** displayed on affected pods
+- Restarts fetched from Kubernetes container status metrics
+
+**Use Cases:**
+- Identify crashing applications quickly
+- Spot misconfigured pods
+- Detect resource constraint issues
+- Monitor rolling update progress
+
+**Interactive Features:**
+- Zoom in/out controls
+- Fit-to-view button
+- Toggle interactivity for screenshots
+- Animated edges showing pod-to-node relationships
+
+---
 
 ### Flow Matrix
-Deep socket-level network analysis with:
+
+Deep socket-level network analysis showing all TCP/UDP connections:
+
+![Flow Matrix](./docs/screenshots/flow-matrix-full.png)
+
+**Table Columns:**
+- **Source Origin** - Pod name initiating the connection
+- **Vector Path** - Connection type indicator (IPV4_DATA_STREAM)
+- **Destination Target** - Target IP address
+- **Protocol Signature** - Protocol (TCP/UDP) and port
+- **Traffic Intensity** - Packet count for the connection
+
+**Features:**
 - Real-time traffic flow monitoring
 - Source and destination visualization
 - Protocol and port tracking
 - Traffic intensity metrics (packet counts)
+- Filter input for searching specific flows
 
-![Flow Matrix](./docs/screenshots/flow-matrix.png)
+**Columns Explained:**
+| Column | Description |
+|--------|-------------|
+| Source Origin | The pod or service generating traffic |
+| Vector Path | Network path type (IPv4/IPv6, stream type) |
+| Destination Target | Remote IP endpoint |
+| Protocol Signature | L4 protocol and port number |
+| Traffic Intensity | Total packets transferred |
 
-### Overview Dashboard
-- Cluster node count and health status
-- Active pod statistics
-- Traffic flow summary
-- Recent activity stream
-- Infrastructure health indicators
+---
+
+### Security View
+
+eBPF-powered runtime security monitoring with intelligent threat detection:
+
+![Security View](./docs/screenshots/security-view-full.png)
+
+#### Dashboard Overview
+
+The Security View provides four clickable stat cards at the top:
+
+| Stat Card | Description | Color |
+|-----------|-------------|-------|
+| **Total Events** | Total security events captured | Cyan |
+| **Critical** | Critical severity alerts | Red |
+| **High Alerts** | High severity alerts | Orange |
+| **Baseline Drift** | Deviation from learned baseline | Yellow |
+
+#### Alert Feed
+
+The main event stream showing real-time security events with severity-based styling:
+
+**Severity Levels:**
+- **CRITICAL** (Red) - Immediate action required
+- **HIGH** (Orange) - Requires attention soon
+- **MEDIUM** (Yellow) - Should be investigated
+- **LOW** (Gray) - Informational
+- **INFO** (Gray) - Debugging information
+
+**Event Types:**
+- `SOCKET_CONNECT` - Network connection tracking
+- `DNS_QUERY` - DNS query monitoring
+- `DNS_TUNNEL` - Potential DNS tunneling detection
+- `SENSITIVE_PATH_ACCESS` - Access to sensitive files
+- `BASELINE_DRIFT` - Deviation from learned baseline
+
+#### Runtime Drift Status
+
+The **Learning Mode** feature captures baseline behavior:
+
+1. Enable the toggle to start learning
+2. System captures paths and processes during learning
+3. New events compared against learned baseline
+4. Deviations flagged as "Baseline Drift"
+
+**Baseline Snapshot Panel:**
+When learning is enabled, shows captured:
+- **Paths** - File paths accessed by processes
+- **Processes** - Process names (comm) observed
+
+![Baseline Drift Detail](./docs/screenshots/security-detail-drift.png)
+
+#### DNS Threat Analysis
+
+Detects suspicious DNS activity:
+
+**Metrics:**
+- **High Entropy** - Count of high-entropy subdomain queries (potential DGA)
+- **NXDOMAIN Rate** - Percentage of non-existent domain lookups
+- **Suspicious TLDs** - Queries to suspicious top-level domains
+
+**Event Details:**
+- Entropy score per query
+- Full domain name
+- Threat classification (HIGH_ENTROPY_SUBDOMAIN, etc.)
+
+#### Sensitive Path Access Monitoring
+
+Alerts for access to critical files and cloud metadata:
+
+**Monitored Paths:**
+- `/etc/shadow` - Password file
+- `/etc/sudoers` - Sudo configuration
+- `/root/.ssh/authorized_keys` - SSH keys
+- `/run/secrets/` - Kubernetes secrets
+- `169.254.169.254/*` - Cloud metadata service
+
+#### Clickable Security Stats
+
+All four stat cards reveal detailed views when clicked:
+
+**Total Events Detail:**
+![All Security Events](./docs/screenshots/security-detail-all.png)
+
+Shows all security events with:
+- Event type and severity
+- Namespace/pod information
+- Process name (comm)
+- Timestamp
+- Additional details (paths, IPs, ports)
+
+**Baseline Drift Detail:**
+![Baseline Drift Analysis](./docs/screenshots/security-detail-drift.png)
+
+Shows:
+- Total drift count
+- Compliance percentage
+- Container count
+- Per-container drift breakdown with visual progress bars
+
+#### Security Modules Overview
+
+Status indicators for all security monitoring components:
+- Socket-to-Process correlation
+- Runtime Drift Detection
+- DNS Threat Monitoring
+- Sensitive Path Access
+
+---
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                     React Frontend                           │
-│                   (lattice-frontend)                       │
-│              Port 80 (nginx)                                 │
+│                   (lattice-frontend)                        │
+│              Port 80 (nginx)                                │
 └─────────────────────┬───────────────────────────────────────┘
-                      │ API
+                      │ HTTP API (/api/*)
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                   FastAPI Backend                           │
-│                    (lattice-backend)                        │
+│                    (lattice-backend)                       │
 │                     Port 8000                               │
-│  ┌──────────────┬──────────────┬──────────────────────┐      │
-│  │   Auth       │  K8s API   │   Security Events   │      │
-│  │   (JWT)      │  (cluster)  │   + Baseline        │      │
-│  └──────────────┴──────────────┴──────────────────────┘   │
+│  ┌──────────────┬──────────────┬──────────────────────┐    │
+│  │   Auth       │  K8s API    │   Security Events   │    │
+│  │   (JWT)      │  (cluster)  │   + Baseline        │    │
+│  │              │              │   Learning          │    │
+│  └──────────────┴──────────────┴──────────────────────┘    │
 └─────────────────────┬───────────────────────────────────────┘
                       │
       ┌───────────────┼───────────────┐
@@ -72,14 +251,24 @@ Deep socket-level network analysis with:
 └─────────────┘ └─────────────┘ └─────────────┘
 ```
 
+**Data Flow:**
+1. Agents collect network/security data via eBPF
+2. Data sent to backend via authenticated API
+3. Backend stores in PostgreSQL and serves via REST API
+4. Frontend displays real-time updates via polling
+
+---
+
 ## Components
 
-| Component | Description |
-|-----------|-------------|
-| **lattice-frontend** | React application with cyberpunk UI |
-| **lattice-backend** | FastAPI server providing REST API + Security monitoring |
-| **lattice-db** | PostgreSQL for metric storage |
-| **lattice-agent** | eBPF-based network monitoring (DaemonSet) |
+| Component | Description | Type |
+|----------|-------------|------|
+| **lattice-frontend** | React SPA with cyberpunk UI | Web Application |
+| **lattice-backend** | FastAPI REST API server | Backend Service |
+| **lattice-db** | PostgreSQL for data storage | Database |
+| **lattice-agent** | eBPF-based monitoring DaemonSet | Kubernetes DaemonSet |
+
+---
 
 ## Deployment
 
@@ -97,7 +286,7 @@ helm install lattice ./helm/lattice --namespace lattice --create-namespace
 
 - Kubernetes cluster (1.20+)
 - Helm 3.x
-- Images pushed to your registry (update values in `helm/lattice/values.yaml`)
+- Docker registry for images (default: `192.168.1.20:5000`)
 
 ### Configuration
 
@@ -124,40 +313,45 @@ kubectl port-forward svc/lattice-frontend 8080:80 -n lattice
 
 Then open http://localhost:8080 in your browser.
 
-**Default credentials:**
+**Default Credentials:**
 - Username: `admin`
-- Password: `change-me-admin` (or from K8s Secret `initial-admin-secret`)
+- Password: `change-me-admin`
+
+---
 
 ## API Endpoints
 
 ### Authentication
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/token` | POST | Authenticate and get JWT token |
+| `/token` | POST | Authenticate with username/password, returns JWT |
 
 ### Topology & Network
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/topology` | GET | Get cluster topology (pods, services, nodes) |
-| `/api/flows` | GET | Get network flow data |
+| `/api/topology` | GET | Cluster topology (pods, services, nodes) |
+| `/api/flows` | GET | Network flow data |
 | `/api/report-flow` | POST | Report network flow from agent |
 
 ### Security Monitoring
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/security/events` | GET | Get security events |
-| `/api/security/events` | POST | Report security event (from agent) |
-| `/api/security/alerts` | GET | Get critical/high alerts |
-| `/api/security/drift` | GET | Get baseline drift status |
-| `/api/security/dns-threats` | GET | Get DNS threat analysis |
-| `/api/security/sensitive-access` | GET | Get sensitive path access events |
-| `/api/security/baseline` | GET | Get baseline learning state |
-| `/api/security/baseline` | PUT | Enable/disable baseline learning mode |
+| `/api/security/events` | GET | All security events |
+| `/api/security/events` | POST | Report event (from agent) |
+| `/api/security/alerts` | GET | Critical/high alerts only |
+| `/api/security/drift` | GET | Baseline drift status |
+| `/api/security/dns-threats` | GET | DNS threat analysis |
+| `/api/security/sensitive-access` | GET | Sensitive path access events |
+| `/api/security/baseline` | GET | Baseline learning state |
+| `/api/security/baseline` | PUT | Enable/disable learning mode |
 | `/api/security/baseline/capture` | POST | Capture event to baseline |
+
+---
 
 ## Security Features
 
 ### Learning Mode
+
 The baseline learning mode captures normal behavior for your cluster:
 
 1. Enable "Learning Mode" toggle in Security View
@@ -166,18 +360,27 @@ The baseline learning mode captures normal behavior for your cluster:
 4. Deviations are flagged as "Baseline Drift"
 
 ### Clickable Security Stats
-All four stat cards (Total Events, Critical, High Alerts, Baseline Drift) are clickable and reveal detailed views:
 
-- **Total Events** - Full list of all security events
-- **Critical** - Critical alerts requiring immediate action
-- **High Alerts** - High priority alerts
-- **Baseline Drift** - Container-wise drift breakdown with compliance metrics
+All four stat cards are interactive:
+
+| Card | Detail View Shows |
+|------|------------------|
+| Total Events | Complete event list with all details |
+| Critical | Critical alerts requiring immediate action |
+| High Alerts | High priority alerts |
+| Baseline Drift | Container-wise drift breakdown with compliance metrics |
 
 ### Security Event Types
-- `SOCKET_CONNECT` - Network connection tracking
-- `DNS_QUERY` - DNS query monitoring with entropy analysis
-- `SENSITIVE_PATH_ACCESS` - Access to sensitive files/paths
-- `BASELINE_DRIFT` - Deviation from learned baseline
+
+| Type | Description | Severity Range |
+|------|-------------|----------------|
+| `SOCKET_CONNECT` | TCP/UDP connection tracking | INFO - HIGH |
+| `DNS_QUERY` | DNS query with entropy analysis | INFO - CRITICAL |
+| `DNS_TUNNEL` | Potential DNS tunneling | LOW - CRITICAL |
+| `SENSITIVE_PATH_ACCESS` | Access to critical files | MEDIUM - CRITICAL |
+| `BASELINE_DRIFT` | Deviation from learned baseline | LOW - HIGH |
+
+---
 
 ## Restart Detection
 
@@ -185,7 +388,7 @@ The Grid Map automatically highlights pods with container restarts:
 
 - **Red border intensity** scales with restart count
 - **"X RESTARTS" badge** displays on affected pods
-- Restarts are fetched from Kubernetes container status metrics
+- Restarts fetched from Kubernetes container status metrics
 
 This helps operators quickly identify:
 - Crashing applications
@@ -193,33 +396,68 @@ This helps operators quickly identify:
 - Resource constraint issues
 - Graceful rolling updates
 
+---
+
 ## Tech Stack
 
-- **Frontend**: React 18, Tailwind CSS, React Flow, Vite
-- **Backend**: Python FastAPI, JWT authentication, Kubernetes client
-- **Database**: PostgreSQL
-- **Agent**: Python with eBPF (fallback to proc-based monitoring)
-- **Deployment**: Helm charts
+| Layer | Technology |
+|-------|------------|
+| **Frontend** | React 18, Tailwind CSS, React Flow, Vite |
+| **Backend** | Python FastAPI, JWT authentication, Kubernetes client |
+| **Database** | PostgreSQL |
+| **Agent** | Python with eBPF (BCC), fallback to proc-based monitoring |
+| **Deployment** | Helm charts, Docker |
+
+---
 
 ## Project Structure
 
 ```
 lattice/
-├── agent/              # eBPF agent code
-│   ├── agent.py        # Main agent with security monitoring
-│   └── Dockerfile
-├── backend/            # FastAPI backend
-│   ├── main.py         # Main application
-│   └── Dockerfile
-├── frontend/           # React frontend
+├── agent/                      # eBPF agent code
+│   ├── agent.py               # Main agent with security monitoring
+│   ├── security_hooks.bpf.c   # eBPF hook definitions
+│   └── Dockerfile             # Agent container image
+│
+├── backend/                    # FastAPI backend
+│   ├── main.py                # Main application with all endpoints
+│   └── Dockerfile              # Backend container image
+│
+├── frontend/                   # React frontend
 │   ├── src/
-│   │   └── App.jsx     # Main React component
-│   ├── nginx.conf
-│   └── Dockerfile
-├── helm/               # Helm charts
-│   └── lattice/        # Lattice Helm chart
-│       ├── values.yaml
-│       └── templates/
-└── docs/
-    └── screenshots/     # Documentation screenshots
+│   │   └── App.jsx           # Main React component (single file SPA)
+│   ├── nginx.conf             # Nginx reverse proxy config
+│   ├── package.json           # Frontend dependencies
+│   └── Dockerfile             # Frontend container image
+│
+├── helm/                       # Helm charts
+│   └── lattice/               # Lattice Helm chart
+│       ├── Chart.yaml
+│       ├── values.yaml        # Configuration values
+│       └── templates/          # K8s resource templates
+│
+├── docs/
+│   └── screenshots/            # Documentation screenshots
+│       ├── overview-full.png
+│       ├── grid-map-full.png
+│       ├── flow-matrix-full.png
+│       ├── security-view-full.png
+│       ├── security-detail-all.png
+│       └── security-detail-drift.png
+│
+├── README.md                   # This file
+└── LICENSE                    # Project license
 ```
+
+---
+
+## Screenshots Reference
+
+| View | Description | Screenshot |
+|------|-------------|-----------|
+| Overview | Cluster summary dashboard | `overview-full.png` |
+| Grid Map | Pod topology visualization | `grid-map-full.png` |
+| Flow Matrix | Network flow table | `flow-matrix-full.png` |
+| Security View | Security dashboard | `security-view-full.png` |
+| Security - All Events | Complete event list | `security-detail-all.png` |
+| Security - Drift | Baseline drift analysis | `security-detail-drift.png` |
