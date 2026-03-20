@@ -199,8 +199,8 @@ for flow in SEED_FLOWS:
 
 @app.post("/api/report-flow")
 async def report_flow(report: FlowReport):
-    # Aggregate flows by source (pod name) and dest port
-    key = f"{report.src}:{report.port}"
+    # Aggregate flows by dest:port to match seed flows
+    key = f"{report.dst}:{report.port}"
     if key in flows_db:
         flows_db[key]["count"] += random.randint(5, 50) # Increment by realistic packet count
         flows_db[key]["last_seen"] = datetime.datetime.utcnow().isoformat()
@@ -223,6 +223,159 @@ async def get_flows(token: str = Depends(oauth2_scheme)):
         flow_copy = flow.copy()
         flow_copy["count"] += random.randint(1, 20) # Simulate traffic happening
         result.append(flow_copy)
+    return result
+
+@app.get("/api/flows/{source}/{dest}/{port}")
+async def get_flow_details(source: str, dest: str, port: int, token: str = Depends(oauth2_scheme)):
+    key = f"{dest}:{port}"
+    if key not in flows_db:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    
+    flow = flows_db[key].copy()
+    flow["count"] += random.randint(1, 20)
+    
+    # Generate simulated live packets
+    packet_types = ["SYN", "ACK", "PSH", "FIN", "RST", "DATA"]
+    protocols = ["TLSv1.3", "HTTP/1.1", "HTTP/2", "QUIC"]
+    statuses = ["Success", "Retransmit", "Timeout"]
+    
+    live_packets = []
+    for i in range(random.randint(3, 8)):
+        live_packets.append({
+            "seq": random.randint(1000, 9999),
+            "ack": random.randint(1000, 9999),
+            "len": random.randint(0, 1460),
+            "type": random.choice(packet_types),
+            "proto": random.choice(protocols),
+            "status": random.choice(statuses),
+            "ttl": random.randint(32, 128),
+            "timestamp": datetime.datetime.utcnow().isoformat()
+        })
+    
+    return {
+        "flow": flow,
+        "live_packets": live_packets
+    }
+
+def is_external_ip(ip: str) -> bool:
+    """Check if IP is external to the Kubernetes cluster network."""
+    if not ip:
+        return False
+    try:
+        parts = ip.split('.')
+        if len(parts) != 4:
+            return True
+        first = int(parts[0])
+        second = int(parts[1])
+        # 10.0.0.0/8 - Kubernetes pods/services
+        if first == 10:
+            return False
+        # 172.16.0.0/12 - Kubernetes services
+        if first == 172 and 16 <= second <= 31:
+            return False
+        # 127.0.0.0/8 - Localhost
+        if first == 127:
+            return False
+        # 169.254.0.0/16 - Link-local/metadata (suspicious!)
+        if first == 169 and second == 254:
+            return True  # Mark as external but flag as metadata
+        # 192.168.x.x and everything else is external traffic
+        return True
+    except:
+        return True
+
+def get_ip_type(ip: str) -> tuple:
+    """Determine type and service for an IP."""
+    if not ip:
+        return ("unknown", ip)
+    
+    # Cloud metadata detection
+    if ip.startswith("169.254."):
+        return ("metadata", "Cloud Metadata Service")
+    
+    # DNS servers
+    if ip in ["8.8.8.8", "8.8.4.4"]:
+        return ("dns", "Google DNS")
+    if ip in ["1.1.1.1", "1.0.0.1"]:
+        return ("dns", "Cloudflare DNS")
+    if ip in ["9.9.9.9"]:
+        return ("dns", "Quad9 DNS")
+    
+    # GitHub
+    if "140.82." in ip or "140.85." in ip:
+        return ("git_repo", "GitHub")
+    if "192.30.252." in ip:
+        return ("git_repo", "GitHub")
+    
+    # Docker Hub
+    if "3.216." in ip or "52.72." in ip or "54.157." in ip or "52.54." in ip or "18.164." in ip:
+        return ("container_registry", "Docker Hub")
+    
+    # GHCR
+    if "140.82.11" in ip or "140.82.12" in ip or "140.82.113" in ip or "140.82.114" in ip or "140.82.115" in ip:
+        return ("container_registry", "GitHub Container Registry")
+    
+    # Quay
+    if "52.202." in ip or "52.54." in ip:
+        return ("container_registry", "Quay")
+    
+    # Prometheus/Grafana repos
+    if "199.232." in ip or "185.199." in ip:
+        return ("helm_repo", "GitHub Pages (Helm Charts)")
+    
+    return ("external", "Unknown External Service")
+
+@app.get("/api/global-traffic")
+async def get_global_traffic(token: str = Depends(oauth2_scheme)):
+    result = []
+    seen_ips = {}
+    
+    for key, flow in flows_db.items():
+        dest_ip = flow.get("dest", "")
+        if is_external_ip(dest_ip):
+            if dest_ip in seen_ips:
+                seen_ips[dest_ip]["count"] += flow.get("count", 0)
+                seen_ips[dest_ip]["bytes_out"] += flow.get("count", 0) * random.randint(100, 1500)
+                seen_ips[dest_ip]["packets"] += random.randint(1, 10)
+            else:
+                ip_type, service = get_ip_type(dest_ip)
+                seen_ips[dest_ip] = {
+                    "ip": dest_ip,
+                    "hostname": dest_ip,
+                    "location": "EXTERNAL",
+                    "type": ip_type,
+                    "port": flow.get("port", 0),
+                    "protocol": flow.get("proto", "TCP").upper(),
+                    "service": service,
+                    "count": flow.get("count", 0),
+                    "bytes_in": random.randint(1000, 50000),
+                    "bytes_out": flow.get("count", 0) * random.randint(100, 1500),
+                    "packets": random.randint(10, 500),
+                    "latency_ms": random.randint(15, 200),
+                    "status": "active",
+                    "source_pods": [flow.get("source", "unknown")],
+                }
+    
+    result = list(seen_ips.values())
+    
+    if not result:
+        result.append({
+            "ip": "0.0.0.0",
+            "hostname": "No external connections detected",
+            "location": "N/A",
+            "type": "none",
+            "port": 0,
+            "protocol": "N/A",
+            "service": "eBPF discovering connections...",
+            "count": 0,
+            "bytes_in": 0,
+            "bytes_out": 0,
+            "packets": 0,
+            "latency_ms": 0,
+            "status": "idle",
+            "source_pods": [],
+        })
+    
     return result
 
 @app.get("/api/pods/{namespace}/{name}/events")

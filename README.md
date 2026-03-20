@@ -4,8 +4,40 @@ A modern, scalable Kubernetes observability platform powered by eBPF that provid
 
 ![Lattice Overview](./docs/screenshots/overview-full.png)
 
+---
+
+## Changelog
+
+### Latest Changes (v1.1.7+)
+
+#### Bug Fixes
+- **Flow Matrix Live Packet Capture**: Fixed issue where flows with high packet counts (e.g., 17000+ pkts) showed "Awaiting packet capture..." instead of live packet stream
+  - **Root Cause**: Inconsistent flow key format between seed flows (`{dest}:{port}`) and agent-reported flows (`{src}:{port}`)
+  - **Fix**: Backend `/api/report-flow` now uses consistent key format `{dest}:{port}` for flow aggregation
+  - **Impact**: All flows now properly aggregate and display live packet streams
+
+#### Features
+- **Live Packet Stream Details**: Click on any flow to view real-time packet capture including:
+  - Packet type (SYN, ACK, PSH, FIN, RST, DATA)
+  - Sequence/acknowledgment numbers
+  - Status (Success, Retransmit, Timeout)
+  - Payload size and latency
+  - Protocol (TLSv1.3, HTTP/1.1, HTTP/2, QUIC)
+- **Enhanced Flow Tracking**: Agent-reported flows now properly aggregate with seed flows
+
+#### Version Information
+| Component | Version |
+|-----------|---------|
+| Frontend | v1.1.28 |
+| Backend | v1.1.7 |
+| Agent | v1.0.7 |
+
+---
+
 ## Table of Contents
 
+- [Changelog](#changelog)
+  - [Latest Changes (v1.1.7+)](#latest-changes-v117)
 - [Features](#features)
   - [Overview Dashboard](#overview-dashboard)
   - [Grid Map (Topology View)](#grid-map-topology-view)
@@ -18,6 +50,7 @@ A modern, scalable Kubernetes observability platform powered by eBPF that provid
 - [Security Features](#security-features)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
+- [Screenshots Reference](#screenshots-reference)
 
 ---
 
@@ -100,6 +133,25 @@ Deep socket-level network analysis showing all TCP/UDP connections:
 - Protocol and port tracking
 - Traffic intensity metrics (packet counts)
 - Filter input for searching specific flows
+- **Live Packet Stream** - Click on any flow to view real-time packet details
+
+**Live Packet Stream Details:**
+When you click on a flow, a detailed panel opens showing:
+
+![Flow Matrix - Live Packet Stream](./docs/screenshots/flow-matrix-live-packets.png)
+
+- **Flow Header** - Source and destination IP addresses with connection arrow
+- **Flow Metadata** - Protocol, port, and total packet count
+- **Traffic Intensity Gauge** - Visual representation of flow activity
+- **Live Packet Stream** - Real-time packet capture with:
+  - Packet type (SYN, ACK, PSH, FIN, RST, DATA)
+  - Sequence and acknowledgment numbers
+  - Status indicators (Success, Retransmit, Timeout)
+  - Payload size and latency
+  - Protocol information (TLSv1.3, HTTP/1.1, HTTP/2, QUIC)
+- **Last Seen** - Timestamp of most recent activity
+
+The live packet stream auto-refreshes every 2 seconds, providing real-time visibility into network communications.
 
 **Columns Explained:**
 | Column | Description |
@@ -294,13 +346,13 @@ Key values in `helm/lattice/values.yaml`:
 
 ```yaml
 backend:
-  image: 192.168.1.20:5000/lattice-backend:v1.0.9
+  image: 192.168.1.20:5000/lattice-backend:v1.1.7
 
 frontend:
-  image: 192.168.1.20:5000/lattice-frontend:v1.0.7
+  image: 192.168.1.20:5000/lattice-frontend:v1.1.28
 
 agent:
-  image: 192.168.1.20:5000/lattice-agent:v1.0.6
+  image: 192.168.1.20:5000/lattice-agent:v1.0.7
 
 namespace: lattice
 ```
@@ -331,6 +383,7 @@ Then open http://localhost:8080 in your browser.
 |----------|--------|-------------|
 | `/api/topology` | GET | Cluster topology (pods, services, nodes) |
 | `/api/flows` | GET | Network flow data |
+| `/api/flows/{source}/{dest}/{port}` | GET | Detailed flow info with live packets |
 | `/api/report-flow` | POST | Report network flow from agent |
 
 ### Security Monitoring
@@ -441,6 +494,7 @@ lattice/
 │       ├── overview-full.png
 │       ├── grid-map-full.png
 │       ├── flow-matrix-full.png
+│       ├── flow-matrix-live-packets.png
 │       ├── security-view-full.png
 │       ├── security-detail-all.png
 │       └── security-detail-drift.png
@@ -458,6 +512,7 @@ lattice/
 | Overview | Cluster summary dashboard | `overview-full.png` |
 | Grid Map | Pod topology visualization | `grid-map-full.png` |
 | Flow Matrix | Network flow table | `flow-matrix-full.png` |
+| Flow Matrix - Live Packets | Live packet stream detail | `flow-matrix-live-packets.png` |
 | Security View | Security dashboard | `security-view-full.png` |
 | Security - All Events | Complete event list | `security-detail-all.png` |
 | Security - Drift | Baseline drift analysis | `security-detail-drift.png` |

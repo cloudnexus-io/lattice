@@ -14,6 +14,8 @@ spec:
     spec:
       serviceAccountName: lattice-agent-sa
       hostPID: true
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       containers:
       - name: agent
         image: {{ .Values.agent.image }}
