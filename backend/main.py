@@ -43,7 +43,7 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin") # Fallback for local dev
 JWT_SECRET = os.getenv("JWT_SECRET", "super-secret-key")
 ALGORITHM = "HS256"
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/token")
 
 class Token(BaseModel):
     access_token: str
@@ -72,7 +72,7 @@ def create_access_token(data: dict):
 
 AGENT_PASSWORD = os.getenv("AGENT_PASSWORD", "lattice-agent-secret")
 
-@app.post("/token", response_model=Token)
+@app.post("/api/token", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     if form_data.password != ADMIN_PASSWORD and form_data.password != AGENT_PASSWORD:
         raise HTTPException(
@@ -224,6 +224,23 @@ async def get_flows(token: str = Depends(oauth2_scheme)):
         flow_copy["count"] += random.randint(1, 20) # Simulate traffic happening
         result.append(flow_copy)
     return result
+
+@app.get("/api/pods/{namespace}/{name}/events")
+async def get_pod_events(namespace: str, name: str, token: str = Depends(oauth2_scheme)):
+    try:
+        events = k8s_v1.list_namespaced_event(namespace, field_selector=f"involvedObject.name={name}")
+        return {"events": [k8s_v1.api_client.sanitize_for_serialization(e) for e in events.items]}
+    except Exception as e:
+        print(f"Error fetching events for {namespace}/{name}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+
+@app.get("/api/pods/{namespace}/{name}")
+async def get_pod_manifest(namespace: str, name: str, token: str = Depends(oauth2_scheme)):
+    try:
+        pod = k8s_v1.read_namespaced_pod(name, namespace)
+        return k8s_v1.api_client.sanitize_for_serialization(pod)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Pod not found: {str(e)}")
 
 # Security Event Models
 class SecurityEvent(BaseModel):

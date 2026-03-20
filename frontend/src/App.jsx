@@ -61,6 +61,8 @@ export default function App() {
     baseline: { learning_enabled: false, status: 'inactive', paths_captured: 0, processes_captured: 0 }
   });
   const [selectedSecurityDetail, setSelectedSecurityDetail] = useState(null);
+  const [selectedPodDetails, setSelectedPodDetails] = useState(null);
+  const [loadingPodDetails, setLoadingPodDetails] = useState(false);
 
   useEffect(() => {
     if (token) {
@@ -123,6 +125,38 @@ export default function App() {
       }));
     } catch (err) {
       console.error('Failed to toggle baseline learning:', err);
+    }
+  };
+
+  const handleNodeClick = async (event, node) => {
+    if (node.type !== 'pod') return;
+    
+    setLoadingPodDetails(true);
+    setSelectedPodDetails({ 
+      name: node.name, 
+      namespace: node.namespace, 
+      restartCount: node.metrics?.restart_count || 0,
+      status: node.status,
+      ip: node.ip,
+      node: node.node
+    });
+    
+    try {
+      const headers = { headers: { Authorization: `Bearer ${token}` } };
+      const [manifestRes, eventsRes] = await Promise.all([
+        axios.get(`${API_BASE}/pods/${node.namespace}/${node.name}`, headers),
+        axios.get(`${API_BASE}/pods/${node.namespace}/${node.name}/events`, headers)
+      ]);
+      
+      setSelectedPodDetails(prev => ({
+        ...prev,
+        manifest: manifestRes.data,
+        events: eventsRes.data.events || []
+      }));
+    } catch (err) {
+      console.error('Failed to fetch pod details:', err);
+    } finally {
+      setLoadingPodDetails(false);
     }
   };
 
@@ -675,6 +709,7 @@ export default function App() {
                 <ReactFlow 
                   nodes={topology.nodes} 
                   edges={topology.edges}
+                  onNodeClick={handleNodeClick}
                 >
                   <Background color="#7000ff" opacity={0.05} gap={20} size={1} />
                   <Controls className="bg-cyber-card border-cyber-accent/30 text-cyber-neon" />
@@ -1231,6 +1266,109 @@ export default function App() {
       <footer className="h-10 border-t border-cyber-accent/10 bg-black/60 flex items-center justify-center px-8 text-[9px] font-black text-cyber-accent/30 uppercase tracking-[0.4em] relative z-10">
         <span className="italic">CLOUDNEXUS_LABS: Lattice</span>
       </footer>
+
+      {selectedPodDetails && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-cyber-card border border-cyber-accent/30 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-[0_0_50px_rgba(112,0,255,0.2)]">
+            <div className="p-6 border-b border-cyber-accent/20 flex items-center justify-between bg-cyber-accent/5">
+              <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-xl ${selectedPodDetails.restartCount > 0 ? 'bg-red-500/10 border-red-500/30' : 'bg-cyber-neon/10 border-cyber-neon/30'} border`}>
+                  <Layers size={24} className={selectedPodDetails.restartCount > 0 ? 'text-red-500' : 'text-cyber-neon'} />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter">{selectedPodDetails.name}</h2>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-[10px] text-cyber-accent font-black uppercase tracking-widest">Namespace: {selectedPodDetails.namespace}</span>
+                    <div className="w-1 h-1 rounded-full bg-cyber-accent/30" />
+                    <span className="text-[10px] text-cyber-accent font-black uppercase tracking-widest">Node: {selectedPodDetails.node}</span>
+                  </div>
+                </div>
+              </div>
+              <button onClick={() => setSelectedPodDetails(null)} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                <X size={24} className="text-cyber-accent" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
+              {loadingPodDetails ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                  <RefreshCw size={40} className="text-cyber-neon animate-spin" />
+                  <span className="text-[10px] font-black uppercase tracking-[0.3em] text-cyber-neon animate-pulse">Retrieving_Data_Stream...</span>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div className="bg-black/40 border border-cyber-accent/10 p-4 rounded-xl">
+                      <span className="text-[8px] text-cyber-accent uppercase font-black tracking-widest mb-1 block">Status_Protocol</span>
+                      <div className="flex items-center gap-2 mt-2">
+                         <StatusBadge status={selectedPodDetails.status} />
+                      </div>
+                    </div>
+                    <div className="bg-black/40 border border-cyber-accent/10 p-4 rounded-xl">
+                      <span className="text-[8px] text-cyber-accent uppercase font-black tracking-widest mb-1 block">Network_Address</span>
+                      <span className="text-lg font-black text-white tracking-tighter mt-1 block">{selectedPodDetails.ip || '0.0.0.0'}</span>
+                    </div>
+                    <div className={`bg-black/40 border p-4 rounded-xl ${selectedPodDetails.restartCount > 0 ? 'border-red-500/30 bg-red-500/5' : 'border-cyber-accent/10'}`}>
+                      <span className="text-[8px] text-cyber-accent uppercase font-black tracking-widest mb-1 block">Restart_Count</span>
+                      <span className={`text-lg font-black tracking-tighter mt-1 block ${selectedPodDetails.restartCount > 0 ? 'text-red-500' : 'text-white'}`}>
+                        {selectedPodDetails.restartCount} EVENTS
+                      </span>
+                    </div>
+                    <div className="bg-black/40 border border-cyber-accent/10 p-4 rounded-xl">
+                      <span className="text-[8px] text-cyber-accent uppercase font-black tracking-widest mb-1 block">Interaction_Mode</span>
+                      <button onClick={() => setSelectedPodDetails(null)} className="mt-2 text-[10px] font-black uppercase text-cyber-neon hover:underline">Terminate_View</button>
+                    </div>
+                  </div>
+
+                  {selectedPodDetails.restartCount > 0 && (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3 border-l-2 border-red-500 pl-4">
+                         <AlertTriangle size={18} className="text-red-500" />
+                         <h3 className="text-sm font-black uppercase tracking-widest text-white italic">Anomaly_Report (Events)</h3>
+                      </div>
+                      <div className="bg-red-500/5 border border-red-500/20 rounded-xl overflow-hidden shadow-[inset_0_0_20px_rgba(239,68,68,0.05)]">
+                         {selectedPodDetails.events && selectedPodDetails.events.length > 0 ? (
+                           <div className="divide-y divide-red-500/10">
+                             {selectedPodDetails.events.map((event, i) => (
+                               <div key={i} className="p-4 flex items-start gap-4 hover:bg-red-500/5 transition-colors">
+                                  <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border ${event.type === 'Warning' ? 'bg-red-500/10 text-red-500 border-red-500/30' : 'bg-cyber-accent/10 text-cyber-accent border-cyber-accent/30'}`}>
+                                     {event.type}
+                                  </div>
+                                  <div className="flex-1">
+                                     <div className="text-[10px] font-bold text-white/80 tracking-tight">{event.reason}</div>
+                                     <div className="text-[9px] text-cyber-accent/60 mt-1 font-mono">{event.message}</div>
+                                  </div>
+                                  <div className="text-[8px] text-cyber-accent/40 font-mono">
+                                     {event.lastTimestamp ? new Date(event.lastTimestamp).toLocaleTimeString() : 'now'}
+                                  </div>
+                               </div>
+                             ))}
+                           </div>
+                         ) : (
+                           <div className="p-8 text-center text-cyber-accent/40 italic text-xs">No recent events logged for this unit.</div>
+                         )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 border-l-2 border-cyber-accent pl-4">
+                       <TerminalIcon size={18} className="text-cyber-accent" />
+                       <h3 className="text-sm font-black uppercase tracking-widest text-white italic">Unit_Configuration (Manifest)</h3>
+                    </div>
+                    <div className="bg-black/60 border border-cyber-accent/20 rounded-xl p-6 font-mono text-[10px] overflow-x-auto text-cyber-neon/80 custom-scrollbar shadow-inner max-h-[400px]">
+                       <pre className="whitespace-pre-wrap">{JSON.stringify(selectedPodDetails.manifest, null, 2)}</pre>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="p-4 border-t border-cyber-accent/10 bg-black/20 flex justify-end">
+               <button onClick={() => setSelectedPodDetails(null)} className="px-6 py-2 bg-cyber-accent/10 border border-cyber-accent/30 hover:border-cyber-neon hover:text-cyber-neon text-white text-[10px] font-black uppercase tracking-widest transition-all rounded-lg">Close_Detail_View</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

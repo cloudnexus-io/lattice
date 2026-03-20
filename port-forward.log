@@ -1,0 +1,19 @@
+Forwarding from 127.0.0.1:8080 -> 80
+Forwarding from [::1]:8080 -> 80
+Handling connection for 8080
+Handling connection for 8080
+Handling connection for 8080
+Handling connection for 8080
+Handling connection for 8080
+Handling connection for 8080
+Handling connection for 8080
+Handling connection for 8080
+Handling connection for 8080
+Handling connection for 8080
+Handling connection for 8080
+Handling connection for 8080
+Handling connection for 8080
+Handling connection for 8080
+E0319 21:26:43.383352   15848 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 8080 -> 80: error forwarding port 80 to pod d7cf73c9d2f8bc0fbd963c4440caec544a793ad3ffd2b76301242d0e96ead99c, uid : network namespace for sandbox \"d7cf73c9d2f8bc0fbd963c4440caec544a793ad3ffd2b76301242d0e96ead99c\" is closed"
+E0319 21:26:43.383681   15848 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 8080 -> 80: error forwarding port 80 to pod d7cf73c9d2f8bc0fbd963c4440caec544a793ad3ffd2b76301242d0e96ead99c, uid : network namespace for sandbox \"d7cf73c9d2f8bc0fbd963c4440caec544a793ad3ffd2b76301242d0e96ead99c\" is closed"
+error: lost connection to pod
