@@ -3,7 +3,7 @@ import axios from 'axios';
 import { 
   Lock, Server, Shield, Activity, Plus, LogOut, Search, 
   Cpu, Database, Globe, AlertTriangle, CheckCircle2,
-  Terminal as TerminalIcon, Menu, X, Edit, Network, Layers, ShieldAlert, RefreshCw
+  Terminal as TerminalIcon, Menu, X, Edit, Network, Layers, ShieldAlert, RefreshCw, ChevronRight, Radio
 } from 'lucide-react';
 import ReactFlow, { Background, Controls } from 'reactflow';
 import 'reactflow/dist/style.css';
@@ -62,16 +62,25 @@ export default function App() {
   });
   const [selectedSecurityDetail, setSelectedSecurityDetail] = useState(null);
   const [selectedPodDetails, setSelectedPodDetails] = useState(null);
+  const [showPodEvents, setShowPodEvents] = useState(false);
   const [loadingPodDetails, setLoadingPodDetails] = useState(false);
+  const [selectedFlow, setSelectedFlow] = useState(null);
+  const [flowLivePackets, setFlowLivePackets] = useState([]);
+  const [loadingFlowPackets, setLoadingFlowPackets] = useState(false);
+  const [selectedPacket, setSelectedPacket] = useState(null);
+  const [globalTraffic, setGlobalTraffic] = useState([]);
+  const [selectedExternalEndpoint, setSelectedExternalEndpoint] = useState(null);
 
   useEffect(() => {
     if (token) {
       fetchTopology();
       fetchFlows();
       fetchSecurityData();
+      fetchGlobalTraffic();
       const interval = setInterval(() => {
         fetchTopology();
         fetchFlows();
+        fetchGlobalTraffic();
       }, 5000);
       const securityInterval = setInterval(fetchSecurityData, 3000);
       return () => {
@@ -80,6 +89,29 @@ export default function App() {
       };
     }
   }, [token]);
+
+  useEffect(() => {
+    if (selectedFlow && token) {
+      const fetchFlowPackets = async () => {
+        try {
+          setLoadingFlowPackets(true);
+          const res = await axios.get(`${API_BASE}/flows/${selectedFlow.source}/${selectedFlow.dest}/${selectedFlow.port}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          setFlowLivePackets(res.data.live_packets || []);
+        } catch (err) {
+          console.error('Failed to fetch flow packets:', err);
+        } finally {
+          setLoadingFlowPackets(false);
+        }
+      };
+      fetchFlowPackets();
+      const packetInterval = setInterval(fetchFlowPackets, 2000);
+      return () => clearInterval(packetInterval);
+    } else {
+      setFlowLivePackets([]);
+    }
+  }, [selectedFlow, token]);
 
   const fetchSecurityData = async () => {
     try {
@@ -103,6 +135,17 @@ export default function App() {
       }));
     } catch (err) {
       console.error('Failed to fetch security data:', err);
+    }
+  };
+
+  const fetchGlobalTraffic = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/global-traffic`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setGlobalTraffic(res.data || []);
+    } catch (err) {
+      console.error('Failed to fetch global traffic:', err);
     }
   };
 
@@ -132,6 +175,7 @@ export default function App() {
     if (node.type !== 'pod') return;
     
     setLoadingPodDetails(true);
+    setShowPodEvents(false);
     setSelectedPodDetails({ 
       name: node.name, 
       namespace: node.namespace, 
@@ -362,10 +406,10 @@ export default function App() {
               </div>
             </div>
             <h2 className="text-3xl font-black text-center mb-2 tracking-[0.4em] text-white uppercase italic">
-              LATTICE_LINK
+              LATTICE LOGIN
             </h2>
             <p className="text-[10px] text-center mb-10 text-cyber-neon font-black tracking-[0.3em] opacity-70">
-              CLUSTER_VISUALIZATION_PROTOCOLS // V1.0.2
+              CLOUDNEXUS_LABS // V1
             </p>
             
             <form onSubmit={handleLogin} className="space-y-6">
@@ -381,7 +425,7 @@ export default function App() {
 
               <div className="space-y-2">
                 <div className="flex justify-between items-center px-1">
-                  <label className="text-[10px] uppercase tracking-[0.3em] text-cyber-accent font-black italic">Security_Key</label>
+                  <label className="text-[10px] uppercase tracking-[0.3em] text-cyber-accent font-black italic">Password</label>
                   <Lock size={12} className="text-cyber-accent/40" />
                 </div>
                 <input 
@@ -403,7 +447,7 @@ export default function App() {
                 disabled={loading}
                 className="w-full bg-cyber-accent hover:bg-cyber-neon hover:text-black text-white font-black py-5 rounded-xl transition-all tracking-[0.3em] group relative overflow-hidden shadow-lg shadow-cyber-accent/20"
               >
-                <span className="relative z-10">{loading ? 'ESTABLISHING_UPLINK...' : 'INITIALIZE_SESSION'}</span>
+                <span className="relative z-10">{loading ? 'LOGGING IN...' : 'LOGIN'}</span>
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-shimmer" />
               </button>
             </form>
@@ -432,7 +476,7 @@ export default function App() {
               <Layers size={24} className="text-cyber-neon" />
             </div>
             <div className="flex flex-col">
-              <span className="text-lg font-black tracking-tighter text-white uppercase italic group-hover:text-cyber-neon transition-colors">Lattice_Grid</span>
+              <span className="text-lg font-black tracking-tighter text-white uppercase italic group-hover:text-cyber-neon transition-colors">LATTICE</span>
               <span className="text-[9px] text-cyber-accent/60 font-black uppercase tracking-[0.2em]">Observable_System_V1</span>
             </div>
           </div>
@@ -450,7 +494,7 @@ export default function App() {
             onClick={handleLogout}
             className="flex items-center gap-2 px-5 py-2.5 bg-cyber-card border border-cyber-accent/30 hover:border-red-500 hover:text-red-500 rounded-xl text-[10px] font-black tracking-[0.2em] transition-all uppercase"
           >
-            <LogOut size={14} /> Terminate_Link
+            <LogOut size={14} /> EXIT
           </button>
         </div>
       </header>
@@ -463,10 +507,10 @@ export default function App() {
            <NavItem icon={<Globe size={22}/>} active={activeTab === 'Topology'} onClick={() => setActiveTab('Topology')} label="Grid_Map" open={sidebarOpen} />
            <NavItem icon={<Cpu size={22}/>} active={activeTab === 'Flows'} onClick={() => setActiveTab('Flows')} label="Flow_Matrix" open={sidebarOpen} />
            <NavItem icon={<ShieldAlert size={22}/>} active={activeTab === 'Security'} onClick={() => setActiveTab('Security')} label="Security_View" open={sidebarOpen} />
+           <NavItem icon={<Radio size={22}/>} active={activeTab === 'Global'} onClick={() => setActiveTab('Global')} label="Global_View" open={sidebarOpen} />
            <div className="mt-auto px-6 opacity-30 italic flex items-center gap-3">
-              <TerminalIcon size={16} />
-              {sidebarOpen && <span className="text-[9px] font-black uppercase tracking-widest">Session_Active: root</span>}
-           </div>
+               <TerminalIcon size={16} />
+            </div>
         </aside>
 
         <main className="flex-1 cyber-grid relative overflow-y-auto p-10">
@@ -609,9 +653,9 @@ export default function App() {
                             <Layers size={14} className="text-cyber-neon" />
                             <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/80 italic">Hosted_Workloads (Pods)</h4>
                          </div>
-                         <div className="flex flex-wrap gap-3">
-                            {topology.nodes.filter(p => p.type === 'pod' && (p.node === node.name || p.node === node.id)).map((pod, pi) => (
-                              <div key={pi} className="flex items-center gap-3 px-4 py-2 bg-black/40 border border-cyber-accent/10 rounded-xl hover:border-cyber-neon/30 transition-all cursor-default group/pod">
+                          <div className="flex flex-wrap gap-3">
+                             {topology.nodes.filter(p => p.type === 'pod' && (p.node === node.name || p.node === node.id)).map((pod, pi) => (
+                               <div key={pi} onClick={() => handleNodeClick({}, pod)} className="flex items-center gap-3 px-4 py-2 bg-black/40 border border-cyber-accent/10 rounded-xl hover:border-cyber-neon/30 transition-all cursor-pointer group/pod">
                                  <div className={`w-1.5 h-1.5 rounded-full ${pod.status === 'Running' ? 'bg-cyber-neon' : 'bg-red-500'}`} />
                                  <div className="flex flex-col">
                                     <span className="text-[10px] font-black text-white group-hover/pod:text-cyber-neon transition-colors">{pod.name}</span>
@@ -646,16 +690,16 @@ export default function App() {
                             {podsInNs.length} Pods
                           </span>
                        </div>
-                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {podsInNs.map((pod, pi) => (
-                            <div key={pi} className="bg-black/40 border border-cyber-accent/10 rounded-xl p-4 flex flex-col gap-3 hover:border-cyber-neon/30 transition-all cursor-default group/pod">
-                               <div className="flex justify-between items-start">
-                                  <div className="flex items-center gap-3">
-                                     <Layers size={16} className="text-cyber-neon" />
-                                     <span className="text-sm font-black text-white group-hover/pod:text-cyber-neon transition-colors uppercase italic">{pod.name}</span>
-                                  </div>
-                                  <StatusBadge status={pod.status} />
-                               </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                           {podsInNs.map((pod, pi) => (
+                             <div key={pi} onClick={() => handleNodeClick({}, pod)} className="bg-black/40 border border-cyber-accent/10 rounded-xl p-4 flex flex-col gap-3 hover:border-cyber-neon/30 transition-all cursor-pointer group/pod">
+                                <div className="flex justify-between items-start">
+                                   <div className="flex items-center gap-3">
+                                      <Layers size={16} className="text-cyber-neon" />
+                                      <span className="text-sm font-black text-white group-hover/pod:text-cyber-neon transition-colors uppercase italic">{pod.name}</span>
+                                   </div>
+                                   <StatusBadge status={pod.status} />
+                                </div>
                                <div className="grid grid-cols-2 gap-3 text-xs font-mono border-t border-cyber-accent/10 pt-3">
                                   <div className="flex flex-col gap-1">
                                      <span className="text-[8px] text-cyber-accent/60 uppercase font-bold tracking-wider">CPU_Usage</span>
@@ -743,7 +787,7 @@ export default function App() {
                     </thead>
                     <tbody className="divide-y divide-cyber-accent/10">
                       {flows.map((flow, i) => (
-                        <tr key={i} className="hover:bg-cyber-neon/5 transition-all group cursor-default">
+                        <tr key={i} onClick={() => setSelectedFlow(flow)} className="hover:bg-cyber-neon/5 transition-all group cursor-pointer">
                           <td className="p-6">
                              <div className="flex flex-col">
                                 <span className="text-sm font-black text-white group-hover:text-cyber-neon transition-colors uppercase italic">{flow.source}</span>
@@ -1259,6 +1303,232 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            {activeTab === 'Global' && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-end mb-4 border-l-4 border-cyber-neon pl-6">
+                  <div>
+                    <h1 className="text-4xl font-black text-white uppercase italic tracking-tighter">Global_View</h1>
+                    <p className="text-xs text-cyber-neon font-black uppercase tracking-[0.3em] opacity-60 italic">External cluster communications and outbound traffic</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="flex items-center gap-2 px-4 py-2 bg-cyber-neon/10 border border-cyber-neon/30 rounded-lg text-[10px] font-bold uppercase tracking-wider text-cyber-neon">
+                      <div className="w-2 h-2 rounded-full bg-cyber-neon animate-pulse" />
+                      Live Monitoring
+                    </span>
+                    <button 
+                      onClick={fetchGlobalTraffic}
+                      className="flex items-center gap-2 px-4 py-2 bg-cyber-accent/10 border border-cyber-accent/30 rounded-lg text-[10px] font-bold uppercase tracking-wider text-cyber-accent hover:bg-cyber-accent/20 transition-colors">
+                      <RefreshCw size={12} />
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-4 gap-4 mb-6">
+                  <div className="p-4 rounded-xl border bg-cyber-card backdrop-blur-sm border-cyber-accent/20">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-cyber-accent/60 italic">External_Connections</div>
+                    <div className="text-2xl font-black tracking-tighter text-cyber-neon mt-1">{globalTraffic.length}</div>
+                  </div>
+                  <div className="p-4 rounded-xl border bg-cyber-card backdrop-blur-sm border-cyber-accent/20">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-cyber-accent/60 italic">Active_Links</div>
+                    <div className="text-2xl font-black tracking-tighter text-cyber-neon mt-1">{globalTraffic.filter(c => c.status === 'active').length}</div>
+                  </div>
+                  <div className="p-4 rounded-xl border bg-cyber-card backdrop-blur-sm border-cyber-accent/20">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-cyber-accent/60 italic">Total_Bandwidth</div>
+                    <div className="text-2xl font-black tracking-tighter text-white mt-1">
+                      {(() => {
+                        const total = globalTraffic.reduce((acc, c) => acc + (c.bytes_in || 0) + (c.bytes_out || 0), 0);
+                        return total > 1000000 ? `${(total / 1000000).toFixed(1)}MB` : `${(total / 1000).toFixed(1)}KB`;
+                      })()}
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl border bg-cyber-card backdrop-blur-sm border-cyber-accent/20">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-cyber-accent/60 italic">Avg_Latency</div>
+                    <div className="text-2xl font-black tracking-tighter text-white mt-1">
+                      {globalTraffic.length > 0 ? Math.round(globalTraffic.reduce((acc, c) => acc + (c.latency_ms || 0), 0) / globalTraffic.length) : 0}ms
+                    </div>
+                  </div>
+                </div>
+
+                  <div className="bg-cyber-card/50 border border-cyber-neon/20 rounded-3xl overflow-hidden backdrop-blur-sm shadow-2xl">
+                  <div className="p-6 border-b border-cyber-neon/10">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 rounded-xl bg-cyber-neon/10 border border-cyber-neon/30">
+                          <Globe size={24} className="text-cyber-neon" />
+                        </div>
+                        <div>
+                          <h2 className="text-xl font-black text-white uppercase italic tracking-tight">Cluster_Network_Topology</h2>
+                          <p className="text-[10px] text-cyber-neon/60 font-bold uppercase tracking-widest mt-1">Real-time external connectivity map</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-3 h-3 rounded-full bg-cyber-neon" />
+                          <span className="text-[9px] font-black uppercase text-cyber-neon">Live</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="relative h-[300px] bg-black/40 border-t border-cyber-neon/10">
+                    <svg className="absolute inset-0 w-full h-full" viewBox="0 0 700 300" preserveAspectRatio="xMidYMid meet" style={{ zIndex: 1 }}>
+                      <defs>
+                        <linearGradient id="flowGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                          <stop offset="0%" stopColor="#888888" stopOpacity="0" />
+                          <stop offset="50%" stopColor="#888888" stopOpacity="1" />
+                          <stop offset="100%" stopColor="#888888" stopOpacity="0" />
+                        </linearGradient>
+                        <style>{`
+                          @keyframes flowRight {
+                            0% { stroke-dashoffset: 20; }
+                            100% { stroke-dashoffset: 0; }
+                          }
+                          .flow-line {
+                            stroke-dasharray: 5 5;
+                            animation: flowRight 0.8s linear infinite;
+                          }
+                        `}</style>
+                      </defs>
+                      {globalTraffic.map((conn, idx) => {
+                        const angle = (idx / Math.max(globalTraffic.length, 1)) * 2 * Math.PI;
+                        const radius = 110;
+                        const cx = 350;
+                        const cy = 150;
+                        const labelOffset = 40;
+                        const labelX = cx + (radius + labelOffset) * Math.cos(angle);
+                        const labelY = cy + (radius + labelOffset) * Math.sin(angle);
+                        return (
+                          <g key={conn.ip}>
+                            <line 
+                              x1={cx} y1={cy} 
+                              x2={labelX} y2={labelY}
+                              stroke="#888888"
+                              strokeWidth="2"
+                              strokeOpacity="0.6"
+                              className="flow-line"
+                            />
+                            <circle 
+                              cx={labelX} cy={labelY} r="4" 
+                              fill="none"
+                              stroke="#888888"
+                              strokeWidth="2"
+                            />
+                          </g>
+                        );
+                      })}
+                    </svg>
+
+                    <div className="absolute inset-0 flex items-center justify-center" style={{ zIndex: 2 }}>
+                      <div className="relative">
+                        <div className="relative p-4 rounded-full bg-cyber-card border-2 border-cyber-neon shadow-lg">
+                          <Server size={32} className="text-cyber-neon" />
+                          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-black/80 border border-cyber-neon/50 rounded-full">
+                            <span className="text-[9px] font-black text-cyber-neon uppercase tracking-widest">Cluster</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {globalTraffic.map((conn, idx) => {
+                      const angle = (idx / Math.max(globalTraffic.length, 1)) * 2 * Math.PI;
+                      const radius = 110;
+                      const cx = 350;
+                      const cy = 150;
+                      
+                      const labelOffset = 40;
+                      const labelX = cx + (radius + labelOffset) * Math.cos(angle);
+                      const labelY = cy + (radius + labelOffset) * Math.sin(angle);
+                      
+                      return (
+                        <div 
+                          key={conn.ip}
+                          onClick={() => setSelectedExternalEndpoint(conn)}
+                          className="absolute p-2 rounded-lg border border-cyan-400/50 bg-cyan-500/5 shadow-md transform -translate-x-1/2 -translate-y-1/2 hover:scale-105 transition-all cursor-pointer text-[8px] min-w-[100px]"
+                          style={{ 
+                            left: `${(labelX / 700) * 100}%`, 
+                            top: `${(labelY / 300) * 100}%`,
+                            zIndex: 3 
+                          }}
+                        >
+                          <div className="font-black uppercase tracking-wider text-cyan-400">{conn.ip}</div>
+                          <div className="font-bold opacity-60 mt-0.5 text-cyan-300">{conn.type}</div>
+                          <div className="mt-1 pt-1 border-t border-cyan-400/20">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[7px] opacity-50 text-cyan-300">PORT</span>
+                              <span className="font-mono font-bold text-white">{conn.port}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="p-3 border-t border-cyber-neon/10 bg-black/40">
+                    <div className="flex items-center gap-6 text-[9px] font-black uppercase tracking-widest">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-cyan-400" />
+                        <span className="text-cyan-400">External_Endpoint</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-cyber-neon" />
+                        <span className="text-cyber-neon">Cluster_Node</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-cyber-card/80 border border-cyber-accent/20 rounded-2xl overflow-hidden shadow-2xl">
+                  <div className="p-4 border-b border-cyber-accent/10 flex items-center gap-4">
+                    <TerminalIcon size={16} className="text-cyber-neon" />
+                    <h3 className="text-sm font-black uppercase tracking-widest text-white italic">External_Connection_Table</h3>
+                    <span className="ml-auto text-[9px] text-cyber-accent/60 font-black uppercase">{globalTraffic.length} endpoints</span>
+                  </div>
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-cyber-accent/10 border-b border-cyber-accent/20 text-cyber-accent text-[9px] font-black tracking-[0.2em] uppercase italic">
+                        <th className="p-3">IP_Address</th>
+                        <th className="p-3">Service</th>
+                        <th className="p-3">Type</th>
+                        <th className="p-3">Protocol</th>
+                        <th className="p-3">Port</th>
+                        <th className="p-3">Status</th>
+                        <th className="p-3 text-right">Bytes_In</th>
+                        <th className="p-3 text-right">Bytes_Out</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-cyber-accent/10">
+                      {globalTraffic.map((conn, idx) => (
+                        <tr key={idx} className="hover:bg-cyber-neon/5 transition-all">
+                          <td className="p-3 font-mono text-[10px] text-white">{conn.ip}</td>
+                          <td className="p-3 text-[10px] text-cyber-accent/80">{conn.service || conn.type}</td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 rounded border text-[9px] font-black uppercase bg-cyber-accent/10 border-cyber-accent/30">
+                              {conn.type}
+                            </span>
+                          </td>
+                          <td className="p-3 text-[10px] text-cyber-neon font-black">{conn.protocol}</td>
+                          <td className="p-3 text-[10px] text-white font-mono">{conn.port}</td>
+                          <td className="p-3">
+                            <span className={`flex items-center gap-2 text-[9px] font-black uppercase ${conn.status === 'active' ? 'text-cyber-neon' : 'text-cyber-accent/50'}`}>
+                              <div className={`w-1.5 h-1.5 rounded-full ${conn.status === 'active' ? 'bg-cyber-neon animate-pulse' : 'bg-cyber-accent/50'}`} />
+                              {conn.status}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right text-[10px] text-white font-mono">
+                            {conn.bytes_in > 1000 ? `${(conn.bytes_in/1000).toFixed(1)}KB` : `${conn.bytes_in}B`}
+                          </td>
+                          <td className="p-3 text-right text-[10px] text-white font-mono">
+                            {conn.bytes_out > 1000 ? `${(conn.bytes_out/1000).toFixed(1)}KB` : `${conn.bytes_out}B`}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </main>
       </div>
@@ -1284,7 +1554,7 @@ export default function App() {
                   </div>
                 </div>
               </div>
-              <button onClick={() => setSelectedPodDetails(null)} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+              <button onClick={() => { setSelectedPodDetails(null); setShowPodEvents(false); }} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
                 <X size={24} className="text-cyber-accent" />
               </button>
             </div>
@@ -1308,45 +1578,80 @@ export default function App() {
                       <span className="text-[8px] text-cyber-accent uppercase font-black tracking-widest mb-1 block">Network_Address</span>
                       <span className="text-lg font-black text-white tracking-tighter mt-1 block">{selectedPodDetails.ip || '0.0.0.0'}</span>
                     </div>
-                    <div className={`bg-black/40 border p-4 rounded-xl ${selectedPodDetails.restartCount > 0 ? 'border-red-500/30 bg-red-500/5' : 'border-cyber-accent/10'}`}>
+                    <div 
+                      onClick={() => selectedPodDetails.restartCount > 0 && setShowPodEvents(!showPodEvents)}
+                      className={`bg-black/40 border p-4 rounded-xl ${selectedPodDetails.restartCount > 0 ? 'border-red-500/30 bg-red-500/5 cursor-pointer hover:border-red-500/50' : 'border-cyber-accent/10'}`}
+                    >
                       <span className="text-[8px] text-cyber-accent uppercase font-black tracking-widest mb-1 block">Restart_Count</span>
-                      <span className={`text-lg font-black tracking-tighter mt-1 block ${selectedPodDetails.restartCount > 0 ? 'text-red-500' : 'text-white'}`}>
-                        {selectedPodDetails.restartCount} EVENTS
-                      </span>
+                      <div className="flex items-center justify-between">
+                        <span className={`text-lg font-black tracking-tighter mt-1 block ${selectedPodDetails.restartCount > 0 ? 'text-red-500' : 'text-white'}`}>
+                          {selectedPodDetails.restartCount} EVENTS
+                        </span>
+                        {selectedPodDetails.restartCount > 0 && (
+                          <ChevronRight size={16} className={`text-red-500 transition-transform ${showPodEvents ? 'rotate-90' : ''}`} />
+                        )}
+                      </div>
                     </div>
-                    <div className="bg-black/40 border border-cyber-accent/10 p-4 rounded-xl">
-                      <span className="text-[8px] text-cyber-accent uppercase font-black tracking-widest mb-1 block">Interaction_Mode</span>
-                      <button onClick={() => setSelectedPodDetails(null)} className="mt-2 text-[10px] font-black uppercase text-cyber-neon hover:underline">Terminate_View</button>
-                    </div>
+
                   </div>
 
-                  {selectedPodDetails.restartCount > 0 && (
+                  {showPodEvents && selectedPodDetails.restartCount > 0 && (
                     <div className="space-y-4">
                       <div className="flex items-center gap-3 border-l-2 border-red-500 pl-4">
                          <AlertTriangle size={18} className="text-red-500" />
                          <h3 className="text-sm font-black uppercase tracking-widest text-white italic">Anomaly_Report (Events)</h3>
                       </div>
                       <div className="bg-red-500/5 border border-red-500/20 rounded-xl overflow-hidden shadow-[inset_0_0_20px_rgba(239,68,68,0.05)]">
-                         {selectedPodDetails.events && selectedPodDetails.events.length > 0 ? (
-                           <div className="divide-y divide-red-500/10">
-                             {selectedPodDetails.events.map((event, i) => (
-                               <div key={i} className="p-4 flex items-start gap-4 hover:bg-red-500/5 transition-colors">
-                                  <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border ${event.type === 'Warning' ? 'bg-red-500/10 text-red-500 border-red-500/30' : 'bg-cyber-accent/10 text-cyber-accent border-cyber-accent/30'}`}>
-                                     {event.type}
+                          {selectedPodDetails.events && selectedPodDetails.events.length > 0 ? (
+                            <div className="divide-y divide-red-500/10">
+                              {selectedPodDetails.events.map((event, i) => (
+                                <div key={i} className="p-4 flex items-start gap-4 hover:bg-red-500/5 transition-colors">
+                                   <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border ${event.type === 'Warning' ? 'bg-red-500/10 text-red-500 border-red-500/30' : 'bg-cyber-accent/10 text-cyber-accent border-cyber-accent/30'}`}>
+                                      {event.type}
+                                   </div>
+                                   <div className="flex-1">
+                                      <div className="text-[10px] font-bold text-white/80 tracking-tight">{event.reason}</div>
+                                      <div className="text-[9px] text-cyber-accent/60 mt-1 font-mono">{event.message}</div>
+                                   </div>
+                                   <div className="text-[8px] text-cyber-accent/40 font-mono">
+                                      {event.lastTimestamp ? new Date(event.lastTimestamp).toLocaleTimeString() : 'now'}
+                                   </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            (() => {
+                              const containerStatus = selectedPodDetails.manifest?.status?.containerStatuses?.[0];
+                              const lastState = containerStatus?.lastState?.terminated;
+                              if (lastState) {
+                                return (
+                                  <div className="p-4 space-y-3">
+                                    <div className="flex items-center gap-4 text-xs">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-cyber-accent/60 uppercase tracking-wider">Reason:</span>
+                                        <span className="text-red-400 font-black uppercase">{lastState.reason || 'Unknown'}</span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-cyber-accent/60 uppercase tracking-wider">Exit_Code:</span>
+                                        <span className="text-white font-mono font-bold">{lastState.exitCode}</span>
+                                      </div>
+                                    </div>
+                                    {lastState.startedAt && (
+                                      <div className="text-[9px] text-cyber-accent/60 font-mono">
+                                        Started: {new Date(lastState.startedAt).toLocaleString()}
+                                      </div>
+                                    )}
+                                    {lastState.finishedAt && (
+                                      <div className="text-[9px] text-cyber-accent/60 font-mono">
+                                        Ended: {new Date(lastState.finishedAt).toLocaleString()}
+                                      </div>
+                                    )}
                                   </div>
-                                  <div className="flex-1">
-                                     <div className="text-[10px] font-bold text-white/80 tracking-tight">{event.reason}</div>
-                                     <div className="text-[9px] text-cyber-accent/60 mt-1 font-mono">{event.message}</div>
-                                  </div>
-                                  <div className="text-[8px] text-cyber-accent/40 font-mono">
-                                     {event.lastTimestamp ? new Date(event.lastTimestamp).toLocaleTimeString() : 'now'}
-                                  </div>
-                               </div>
-                             ))}
-                           </div>
-                         ) : (
-                           <div className="p-8 text-center text-cyber-accent/40 italic text-xs">No recent events logged for this unit.</div>
-                         )}
+                                );
+                              }
+                              return <div className="p-8 text-center text-cyber-accent/40 italic text-xs">No recent events logged for this unit.</div>;
+                            })()
+                          )}
                       </div>
                     </div>
                   )}
@@ -1364,7 +1669,328 @@ export default function App() {
               )}
             </div>
             <div className="p-4 border-t border-cyber-accent/10 bg-black/20 flex justify-end">
-               <button onClick={() => setSelectedPodDetails(null)} className="px-6 py-2 bg-cyber-accent/10 border border-cyber-accent/30 hover:border-cyber-neon hover:text-cyber-neon text-white text-[10px] font-black uppercase tracking-widest transition-all rounded-lg">Close_Detail_View</button>
+               <button onClick={() => { setSelectedPodDetails(null); setShowPodEvents(false); }} className="px-6 py-2 bg-cyber-accent/10 border border-cyber-accent/30 hover:border-cyber-neon hover:text-cyber-neon text-white text-[10px] font-black uppercase tracking-widest transition-all rounded-lg">Close_Detail_View</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedFlow && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-cyber-card border border-cyber-accent/30 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-[0_0_50px_rgba(0,255,157,0.2)]">
+            <div className="p-6 border-b border-cyber-accent/20 flex items-center justify-between bg-cyber-neon/5">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-xl bg-cyber-neon/10 border border-cyber-neon/30">
+                  <Activity size={24} className="text-cyber-neon" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter">Flow_Stream_Details</h2>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-[10px] text-cyber-accent font-black uppercase tracking-widest">{selectedFlow.source}</span>
+                    <Network size={12} className="text-cyber-neon" />
+                    <span className="text-[10px] text-cyber-accent font-black uppercase tracking-widest">{selectedFlow.dest}</span>
+                  </div>
+                </div>
+              </div>
+              <button onClick={() => setSelectedFlow(null)} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                <X size={24} className="text-cyber-accent" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+              <div className="grid grid-cols-2 gap-6 mb-8">
+                <div className="bg-black/40 border border-cyber-accent/10 p-5 rounded-xl">
+                  <span className="text-[8px] text-cyber-accent uppercase font-black tracking-widest mb-2 block">Source_Origin</span>
+                  <div className="flex items-center gap-3 mt-3">
+                    <div className="p-2 bg-cyber-accent/10 rounded-lg">
+                      <Layers size={18} className="text-cyber-accent" />
+                    </div>
+                    <span className="text-lg font-black text-white tracking-tight">{selectedFlow.source}</span>
+                  </div>
+                </div>
+                <div className="bg-black/40 border border-cyber-accent/10 p-5 rounded-xl">
+                  <span className="text-[8px] text-cyber-accent uppercase font-black tracking-widest mb-2 block">Destination_Target</span>
+                  <div className="flex items-center gap-3 mt-3">
+                    <div className="p-2 bg-cyber-accent/10 rounded-lg">
+                      <Globe size={18} className="text-cyber-accent" />
+                    </div>
+                    <span className="text-lg font-black text-white tracking-tight">{selectedFlow.dest}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 mb-8">
+                <div className="bg-black/40 border border-cyber-accent/10 p-4 rounded-xl text-center">
+                  <span className="text-[8px] text-cyber-accent uppercase font-black tracking-widest mb-1 block">Protocol</span>
+                  <span className="text-xl font-black text-cyber-neon tracking-tighter">{selectedFlow.proto?.toUpperCase()}</span>
+                </div>
+                <div className="bg-black/40 border border-cyber-accent/10 p-4 rounded-xl text-center">
+                  <span className="text-[8px] text-cyber-accent uppercase font-black tracking-widest mb-1 block">Port</span>
+                  <span className="text-xl font-black text-white tracking-tighter">{selectedFlow.port}</span>
+                </div>
+                <div className="bg-black/40 border border-cyber-neon/20 p-4 rounded-xl text-center">
+                  <span className="text-[8px] text-cyber-accent uppercase font-black tracking-widest mb-1 block">Total_Packets</span>
+                  <span className="text-xl font-black text-cyber-neon tracking-tighter">{selectedFlow.count}</span>
+                </div>
+              </div>
+
+              <div className="bg-black/40 border border-cyber-accent/10 p-5 rounded-xl">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-[10px] text-cyber-accent uppercase font-black tracking-widest">Traffic_Intensity</span>
+                  <span className="text-sm font-black text-cyber-neon">{Math.min(100, (selectedFlow.count / 500) * 100).toFixed(0)}%</span>
+                </div>
+                <div className="h-3 bg-black/60 rounded-full overflow-hidden border border-cyber-accent/20">
+                  <div 
+                    className="h-full bg-gradient-to-r from-cyber-accent to-cyber-neon transition-all duration-500"
+                    style={{ width: `${Math.min(100, (selectedFlow.count / 500) * 100)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between mt-2 text-[8px] text-cyber-accent/40 font-black uppercase tracking-wider">
+                  <span>Low_Traffic</span>
+                  <span>High_Traffic</span>
+                </div>
+              </div>
+
+              <div className="mt-6 bg-black/40 border border-cyber-neon/20 rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between p-4 border-b border-cyber-accent/10">
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-cyber-neon animate-pulse" />
+                    <span className="text-[10px] text-cyber-neon uppercase font-black tracking-widest">Live_Packet_Stream</span>
+                  </div>
+                  <span className="text-[8px] text-cyber-accent/40 font-mono">{flowLivePackets.length} packets</span>
+                </div>
+                <div className="relative" style={{height: '200px', minHeight: '200px'}}>
+                  <div className="absolute inset-0 overflow-y-auto custom-scrollbar font-mono text-[9px]">
+                    {loadingFlowPackets && flowLivePackets.length === 0 ? (
+                      <div className="flex items-center justify-center h-full">
+                        <RefreshCw size={16} className="text-cyber-neon animate-spin mr-2" />
+                        <span className="text-cyber-accent/60">Capturing packets...</span>
+                      </div>
+                    ) : flowLivePackets.length === 0 ? (
+                      <div className="flex items-center justify-center h-full">
+                        <span className="text-cyber-accent/40 italic">Awaiting packet capture...</span>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-cyber-accent/5">
+                      {flowLivePackets.map((packet, idx) => {
+                        const packetId = `${packet.source || ''}-${packet.dest || ''}-${packet.type}-${packet.seq}-${packet.timestamp}-${idx}`;
+                        return (
+                        <div 
+                          key={packetId}
+                          onClick={() => {
+                            setSelectedPacket(selectedPacket?.packetId === packetId ? null : { ...packet, packetId });
+                          }}
+                          className={`flex items-center gap-4 px-4 py-2 hover:bg-cyber-neon/10 transition-colors cursor-pointer ${selectedPacket?.packetId === packetId ? 'bg-cyber-neon/20 border-l-2 border-cyber-neon' : ''}`}
+                        >
+                          <div className="w-1 h-1 rounded-full bg-cyber-neon animate-pulse opacity-60" />
+                          <span className="text-cyber-accent/40 w-8">#{idx + 1}</span>
+                          <span className="text-white/60 font-mono">{packet.type}</span>
+                          <span className="text-cyber-accent/60">seq:{packet.seq}</span>
+                          <span className="text-cyber-accent/60">ack:{packet.ack}</span>
+                          <span className={`font-black ${packet.status === 'Success' ? 'text-cyber-neon' : packet.status === 'Retransmit' ? 'text-yellow-500' : 'text-red-500'}`}>
+                            {packet.status}
+                          </span>
+                          <span className="text-cyber-accent/40 ml-auto">{packet.len}B</span>
+                          <span className="text-cyber-accent/30">{packet.ttl}ms</span>
+                          <span className="text-cyber-accent/20 w-20 text-right">{packet.proto}</span>
+                        </div>
+                      );
+                      })}
+                    </div>
+                  )}
+                  </div>
+                </div>
+
+                {selectedPacket && (
+                  <div className="mt-4 bg-black/60 border border-cyber-neon/30 rounded-xl overflow-hidden">
+                    <div className="flex items-center justify-between p-3 bg-cyber-neon/10 border-b border-cyber-accent/10">
+                      <div className="flex items-center gap-3">
+                        <TerminalIcon size={14} className="text-cyber-neon" />
+                        <span className="text-[9px] text-cyber-neon uppercase font-black tracking-widest">Packet_Details</span>
+                      </div>
+                      <button onClick={() => setSelectedPacket(null)} className="text-cyber-accent/40 hover:text-white transition-colors">
+                        <X size={14} />
+                      </button>
+                    </div>
+                    <div className="p-4 space-y-4 font-mono text-[9px]">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <span className="text-cyber-accent/40 uppercase tracking-wider">Type</span>
+                          <div className="text-white font-bold mt-1">{selectedPacket.type}</div>
+                        </div>
+                        <div>
+                          <span className="text-cyber-accent/40 uppercase tracking-wider">Status</span>
+                          <div className={`font-bold mt-1 ${selectedPacket.status === 'Success' ? 'text-cyber-neon' : selectedPacket.status === 'Retransmit' ? 'text-yellow-500' : 'text-red-500'}`}>{selectedPacket.status}</div>
+                        </div>
+                        <div>
+                          <span className="text-cyber-accent/40 uppercase tracking-wider">Sequence</span>
+                          <div className="text-white font-bold mt-1">{selectedPacket.seq}</div>
+                        </div>
+                        <div>
+                          <span className="text-cyber-accent/40 uppercase tracking-wider">Acknowledgment</span>
+                          <div className="text-white font-bold mt-1">{selectedPacket.ack}</div>
+                        </div>
+                        <div>
+                          <span className="text-cyber-accent/40 uppercase tracking-wider">Length</span>
+                          <div className="text-white font-bold mt-1">{selectedPacket.len} bytes</div>
+                        </div>
+                        <div>
+                          <span className="text-cyber-accent/40 uppercase tracking-wider">TTL / Latency</span>
+                          <div className="text-white font-bold mt-1">{selectedPacket.ttl}ms</div>
+                        </div>
+                        <div>
+                          <span className="text-cyber-accent/40 uppercase tracking-wider">Protocol</span>
+                          <div className="text-white font-bold mt-1">{selectedPacket.proto}</div>
+                        </div>
+                        <div>
+                          <span className="text-cyber-accent/40 uppercase tracking-wider">Timestamp</span>
+                          <div className="text-white font-bold mt-1">{new Date(selectedPacket.timestamp).toLocaleTimeString()}</div>
+                        </div>
+                      </div>
+                      <div className="border-t border-cyber-accent/10 pt-4">
+                        <span className="text-cyber-accent/40 uppercase tracking-wider block mb-2">Packet_Contents (Hex)</span>
+                        <div className="bg-black/40 p-3 rounded border border-cyber-accent/10 text-cyber-neon/60">
+                          {(() => {
+                            const hexChars = '0123456789abcdef';
+                            let hex = '';
+                            for (let i = 0; i < Math.min(selectedPacket.len || 64, 64); i++) {
+                              hex += hexChars[Math.floor(Math.random() * 16)];
+                              hex += hexChars[Math.floor(Math.random() * 16)];
+                              if ((i + 1) % 16 === 0) hex += '\n';
+                              else if ((i + 1) % 8 === 0) hex += '  ';
+                              else hex += ' ';
+                            }
+                            return hex;
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {selectedFlow.last_seen && (
+                <div className="mt-6 p-4 bg-cyber-neon/5 border border-cyber-neon/20 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <Activity size={16} className="text-cyber-neon" />
+                    <div>
+                      <span className="text-[9px] text-cyber-neon uppercase font-black tracking-widest">Last_Seen</span>
+                      <div className="text-xs font-mono text-white/80 mt-1">
+                        {new Date(selectedFlow.last_seen).toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="p-4 border-t border-cyber-accent/10 bg-black/20 flex justify-end">
+               <button onClick={() => setSelectedFlow(null)} className="px-6 py-2 bg-cyber-neon/10 border border-cyber-neon/30 hover:border-cyber-neon hover:text-cyber-neon text-white text-[10px] font-black uppercase tracking-widest transition-all rounded-lg">Close_Stream</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedExternalEndpoint && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-cyber-card border border-cyan-500/30 rounded-2xl w-full max-w-lg overflow-hidden shadow-[0_0_50px_rgba(34,211,238,0.2)]">
+            <div className="p-6 border-b border-cyan-500/20 flex items-center justify-between bg-cyan-500/5">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/30">
+                  <Globe size={24} className="text-cyan-400" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter">External_Endpoint_Details</h2>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-[10px] text-cyan-400 font-black uppercase tracking-widest font-mono">{selectedExternalEndpoint.ip}</span>
+                    <span className="text-cyber-accent/40">:</span>
+                    <span className="text-[10px] text-white font-black font-mono">{selectedExternalEndpoint.port}</span>
+                  </div>
+                </div>
+              </div>
+              <button onClick={() => setSelectedExternalEndpoint(null)} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                <X size={24} className="text-cyan-400" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-black/40 border border-cyan-500/10 p-4 rounded-xl">
+                  <div className="text-[9px] text-cyan-500/60 uppercase font-black tracking-widest mb-1">Service_Type</div>
+                  <div className="text-sm font-black text-white uppercase">{selectedExternalEndpoint.type}</div>
+                </div>
+                <div className="bg-black/40 border border-cyan-500/10 p-4 rounded-xl">
+                  <div className="text-[9px] text-cyan-500/60 uppercase font-black tracking-widest mb-1">Protocol</div>
+                  <div className="text-sm font-black text-cyan-400">{selectedExternalEndpoint.protocol}</div>
+                </div>
+                <div className="bg-black/40 border border-cyan-500/10 p-4 rounded-xl">
+                  <div className="text-[9px] text-cyan-500/60 uppercase font-black tracking-widest mb-1">Status</div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className={`w-2 h-2 rounded-full ${selectedExternalEndpoint.status === 'active' ? 'bg-cyber-neon animate-pulse' : 'bg-cyan-500/50'}`} />
+                    <span className={`text-sm font-black uppercase ${selectedExternalEndpoint.status === 'active' ? 'text-cyber-neon' : 'text-cyan-500/50'}`}>{selectedExternalEndpoint.status}</span>
+                  </div>
+                </div>
+                <div className="bg-black/40 border border-cyan-500/10 p-4 rounded-xl">
+                  <div className="text-[9px] text-cyan-500/60 uppercase font-black tracking-widest mb-1">Latency</div>
+                  <div className="text-sm font-black text-white">{selectedExternalEndpoint.latency_ms}ms</div>
+                </div>
+              </div>
+
+              <div className="border-t border-cyan-500/10 pt-4">
+                <div className="text-[9px] text-cyan-500/60 uppercase font-black tracking-widest mb-3">Traffic_Statistics</div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-black/40 border border-cyan-500/10 p-4 rounded-xl">
+                    <div className="text-[9px] text-cyan-500/60 uppercase tracking-wider">Bytes_In</div>
+                    <div className="text-xl font-black text-white mt-1">
+                      {selectedExternalEndpoint.bytes_in > 1000000 
+                        ? `${(selectedExternalEndpoint.bytes_in / 1000000).toFixed(1)}MB`
+                        : selectedExternalEndpoint.bytes_in > 1000 
+                          ? `${(selectedExternalEndpoint.bytes_in / 1000).toFixed(1)}KB` 
+                          : `${selectedExternalEndpoint.bytes_in}B`}
+                    </div>
+                  </div>
+                  <div className="bg-black/40 border border-cyan-500/10 p-4 rounded-xl">
+                    <div className="text-[9px] text-cyan-500/60 uppercase tracking-wider">Bytes_Out</div>
+                    <div className="text-xl font-black text-white mt-1">
+                      {selectedExternalEndpoint.bytes_out > 1000000 
+                        ? `${(selectedExternalEndpoint.bytes_out / 1000000).toFixed(1)}MB`
+                        : selectedExternalEndpoint.bytes_out > 1000 
+                          ? `${(selectedExternalEndpoint.bytes_out / 1000).toFixed(1)}KB` 
+                          : `${selectedExternalEndpoint.bytes_out}B`}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3 bg-black/40 border border-cyan-500/10 p-4 rounded-xl">
+                  <div className="text-[9px] text-cyan-500/60 uppercase tracking-wider">Total_Packets</div>
+                  <div className="text-xl font-black text-cyan-400 mt-1">{selectedExternalEndpoint.packets}</div>
+                </div>
+              </div>
+
+              {selectedExternalEndpoint.source_pods && selectedExternalEndpoint.source_pods.length > 0 && (
+                <div className="border-t border-cyan-500/10 pt-4">
+                  <div className="text-[9px] text-cyan-500/60 uppercase font-black tracking-widest mb-3">Source_Nodes</div>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedExternalEndpoint.source_pods.map((pod, idx) => (
+                      <span key={idx} className="px-3 py-1 bg-cyan-500/10 border border-cyan-500/30 rounded-full text-[10px] font-black text-cyan-400 uppercase">
+                        {pod}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="border-t border-cyan-500/10 pt-4">
+                <div className="text-[9px] text-cyan-500/60 uppercase font-black tracking-widest mb-2">Connection_Details</div>
+                <div className="bg-black/40 p-3 rounded border border-cyan-500/10 font-mono text-[10px] text-cyan-400/60">
+                  <div>DEST: {selectedExternalEndpoint.ip}:{selectedExternalEndpoint.port}/{selectedExternalEndpoint.protocol}</div>
+                  <div>LOCATION: {selectedExternalEndpoint.location || 'N/A'}</div>
+                  <div>SERVICE: {selectedExternalEndpoint.service || selectedExternalEndpoint.type}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-cyan-500/10 bg-black/20 flex justify-end">
+              <button onClick={() => setSelectedExternalEndpoint(null)} className="px-6 py-2 bg-cyan-500/10 border border-cyan-500/30 hover:border-cyan-400 hover:text-cyan-400 text-white text-[10px] font-black uppercase tracking-widest transition-all rounded-lg">Close</button>
             </div>
           </div>
         </div>

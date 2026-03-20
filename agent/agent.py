@@ -25,6 +25,7 @@ from threading import Thread, Event
 import requests
 
 BACKEND_URL = os.getenv("LATTICE_BACKEND_URL", "http://lattice-backend:8000")
+API_BASE = f"{BACKEND_URL}/api"
 NODE_NAME = os.getenv("NODE_NAME", "unknown")
 REPORT_INTERVAL = int(os.getenv("REPORT_INTERVAL", "5"))
 AGENT_USERNAME = os.getenv("AGENT_USERNAME", "agent")
@@ -41,7 +42,7 @@ class AuthToken:
         
         try:
             resp = requests.post(
-                f"{BACKEND_URL}/token",
+                f"{API_BASE}/token",
                 data={"username": AGENT_USERNAME, "password": AGENT_PASSWORD},
                 timeout=5
             )
@@ -219,7 +220,7 @@ class SecurityCollector:
             if token:
                 headers["Authorization"] = f"Bearer {token}"
             requests.post(
-                f"{BACKEND_URL}/api/security/events",
+                f"{API_BASE}/security/events",
                 json=event,
                 headers=headers,
                 timeout=2
@@ -439,54 +440,40 @@ class SecurityCollector:
 class FlowReporter:
     """Reports network flows to the backend."""
     
-    POD_SOURCES = [
-        "nginx-abc123", "redis-def456", "postgres-ghi789", "api-server-jkl012",
-        "task-processor-mno345", "lattice-backend", "frontend-xyz"
-    ]
-    DEST_PORTS = {
-        "80": "10.10.1.10",
-        "443": "10.10.1.11",
-        "8000": "10.10.1.20",
-        "5432": "10.10.1.30",
-        "6379": "10.10.1.40",
-        "8080": "10.10.1.50",
-        "5672": "10.10.1.60",
-    }
-    
     def __init__(self):
         self.known_flows = {}
         self.report_interval = 10
     
-    def report_mock_flows(self):
-        """Report simulated flows in mock mode."""
-        import random
+    def _is_external_ip(self, ip):
+        """Check if IP is external to the cluster."""
+        if not ip or ip == "0.0.0.0":
+            return False
+        parts = ip.split('.')
+        if len(parts) != 4:
+            return True
         try:
-            token = auth.get()
-            headers = {}
-            if token:
-                headers["Authorization"] = f"Bearer {token}"
-            
-            src_pod = random.choice(self.POD_SOURCES)
-            port = random.choice(list(self.DEST_PORTS.keys()))
-            dst_ip = self.DEST_PORTS[port]
-            
-            requests.post(
-                f"{BACKEND_URL}/api/report-flow",
-                json={
-                    "src": src_pod,
-                    "dst": dst_ip,
-                    "port": int(port),
-                    "node": NODE_NAME,
-                },
-                headers=headers,
-                timeout=2
-            )
-        except Exception as e:
-            print(f"FlowReporter: Failed to report flow: {e}")
+            first = int(parts[0])
+            second = int(parts[1])
+            # 10.0.0.0/8 - Kubernetes pods/services
+            if first == 10:
+                return False
+            # 172.16.0.0/12 - Kubernetes services
+            if first == 172 and 16 <= second <= 31:
+                return False
+            # 192.168.0.0/16 - Internal network (but may have external if node IP)
+            if first == 192 and second == 168:
+                return False
+            # 127.0.0.0/8 - Localhost
+            if first == 127:
+                return False
+            return True
+        except:
+            return False
     
     def scan_connections(self):
         """Scan /proc/net for active connections."""
         flows = []
+        external_count = 0
         try:
             for proto in ['tcp', 'udp']:
                 with open(f'/proc/net/{proto}', 'r') as f:
@@ -505,9 +492,10 @@ class FlowReporter:
                         local_ip, local_port = self._parse_addr(local_addr)
                         remote_ip, remote_port = self._parse_addr(remote_addr)
                         
-                        if remote_ip == "0.0.0.0":
+                        if remote_ip == "0.0.0.0" or remote_ip == "127.0.0.1":
                             continue
                         
+                        # Track all connections
                         flow_key = f"{local_ip}:{local_port}->{remote_ip}:{remote_port}"
                         if flow_key not in self.known_flows:
                             self.known_flows[flow_key] = {
@@ -515,11 +503,19 @@ class FlowReporter:
                                 "dst": remote_ip,
                                 "port": remote_port,
                                 "proto": proto.upper(),
+                                "external": self._is_external_ip(remote_ip),
                             }
+                            if self._is_external_ip(remote_ip):
+                                external_count += 1
                         
                         flows.append(flow_key)
+            
+            if external_count > 0:
+                print(f"FlowReporter: Found {external_count} external connections")
+            else:
+                print(f"FlowReporter: Scanned {len(flows)} connections (none external)")
         except Exception as e:
-            pass
+            print(f"FlowReporter: Scan error: {e}")
         
         return flows
     
@@ -543,16 +539,16 @@ class FlowReporter:
                 headers = {}
                 if token:
                     headers["Authorization"] = f"Bearer {token}"
-                    print(f"FlowReporter: Got auth token, reporting {len(self.known_flows)} real flows")
                 
                 for flow_key, flow in self.known_flows.items():
                     try:
                         requests.post(
-                            f"{BACKEND_URL}/api/report-flow",
+                            f"{API_BASE}/report-flow",
                             json={
                                 "src": flow["src"],
                                 "dst": flow["dst"],
                                 "port": flow["port"],
+                                "proto": flow.get("proto", "TCP"),
                                 "node": NODE_NAME,
                             },
                             headers=headers,
@@ -562,8 +558,6 @@ class FlowReporter:
                         pass
             except Exception as e:
                 pass
-        else:
-            self.report_mock_flows()
     
     def run(self):
         """Report flows periodically."""
