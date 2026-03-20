@@ -9,7 +9,7 @@ postgresql:
 
 backend:
   replicaCount: 1
-  image: 192.168.1.20:5000/lattice-backend:v1.0.9
+  image: 192.168.1.20:5000/lattice-backend:v1.1.2
   service:
     type: ClusterIP
     port: 8000
@@ -22,7 +22,7 @@ agent:
 
 frontend:
   replicaCount: 1
-  image: 192.168.1.20:5000/lattice-frontend:v1.0.7
+  image: 192.168.1.20:5000/lattice-frontend:v1.1.1
   service:
     type: ClusterIP
     port: 80
