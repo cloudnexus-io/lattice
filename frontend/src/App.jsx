@@ -3,7 +3,7 @@ import axios from 'axios';
 import { 
   Lock, Server, Shield, Activity, Plus, LogOut, Search, 
   Cpu, Database, Globe, AlertTriangle, CheckCircle2,
-  Terminal as TerminalIcon, Menu, X, Edit, Network, Layers, ShieldAlert, RefreshCw, ChevronRight, Radio
+  Terminal as TerminalIcon, Menu, X, Edit, Network, Layers, ShieldAlert, RefreshCw, ChevronRight, Radio, Palette, Settings
 } from 'lucide-react';
 import ReactFlow, { Background, Controls } from 'reactflow';
 import 'reactflow/dist/style.css';
@@ -43,8 +43,39 @@ function StatusBadge({ status }) {
   );
 }
 
+function ThemeSelector({ theme, onThemeChange }) {
+  return (
+    <div className="space-y-3">
+      <div className="text-[10px] font-black uppercase tracking-widest text-theme-accent/60">Theme</div>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onThemeChange('cyber')}
+          className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+            theme === 'cyber' 
+              ? 'bg-theme-neon/20 text-theme-neon border border-theme-neon/30' 
+              : 'bg-black/20 text-theme-accent/60 border border-theme-accent/10 hover:border-theme-accent/30'
+          }`}
+        >
+          Cyber
+        </button>
+        <button
+          onClick={() => onThemeChange('clean')}
+          className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+            theme === 'clean' 
+              ? 'bg-theme-neon/20 text-theme-neon border border-theme-neon/30' 
+              : 'bg-black/20 text-theme-accent/60 border border-theme-accent/10 hover:border-theme-accent/30'
+          }`}
+        >
+          Clean
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem('token'));
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'cyber');
   const [topology, setTopology] = useState({ nodes: [], edges: [] });
   const [flows, setFlows] = useState([]);
   const [loginForm, setLoginForm] = useState({ username: 'admin', password: '' });
@@ -70,6 +101,12 @@ export default function App() {
   const [selectedPacket, setSelectedPacket] = useState(null);
   const [globalTraffic, setGlobalTraffic] = useState([]);
   const [selectedExternalEndpoint, setSelectedExternalEndpoint] = useState(null);
+  const [showConfig, setShowConfig] = useState(false);
+  const [configTab, setConfigTab] = useState('appearance');
+  const [users, setUsers] = useState([]);
+  const [newUser, setNewUser] = useState({ username: '', password: '' });
+  const [editingUser, setEditingUser] = useState(null);
+  const [userPassword, setUserPassword] = useState('');
 
   useEffect(() => {
     if (token) {
@@ -89,6 +126,11 @@ export default function App() {
       };
     }
   }, [token]);
+
+  useEffect(() => {
+    document.body.className = `theme-${theme}`;
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
   useEffect(() => {
     if (selectedFlow && token) {
@@ -112,6 +154,10 @@ export default function App() {
       setFlowLivePackets([]);
     }
   }, [selectedFlow, token]);
+
+  const handleThemeChange = (newTheme) => {
+    setTheme(newTheme);
+  };
 
   const fetchSecurityData = async () => {
     try {
@@ -148,6 +194,60 @@ export default function App() {
       console.error('Failed to fetch global traffic:', err);
     }
   };
+
+  const fetchUsers = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/users`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setUsers(res.data || []);
+    } catch (err) {
+      console.error('Failed to fetch users:', err);
+    }
+  };
+
+  const createUser = async () => {
+    if (!newUser.username || !newUser.password) return;
+    try {
+      await axios.post(`${API_BASE}/users`, newUser, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setNewUser({ username: '', password: '' });
+      fetchUsers();
+    } catch (err) {
+      console.error('Failed to create user:', err);
+    }
+  };
+
+  const updateUserPassword = async (username) => {
+    if (!userPassword) return;
+    try {
+      await axios.put(`${API_BASE}/users/${username}`, { password: userPassword }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setEditingUser(null);
+      setUserPassword('');
+    } catch (err) {
+      console.error('Failed to update user:', err);
+    }
+  };
+
+  const deleteUser = async (username) => {
+    try {
+      await axios.delete(`${API_BASE}/users/${username}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      fetchUsers();
+    } catch (err) {
+      console.error('Failed to delete user:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (showConfig && configTab === 'users') {
+      fetchUsers();
+    }
+  }, [showConfig, configTab]);
 
   const toggleBaselineLearning = async () => {
     try {
@@ -483,6 +583,12 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-8">
+          <button 
+            onClick={() => setShowConfig(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-cyber-card border border-cyber-accent/30 hover:border-cyber-neon hover:text-cyber-neon rounded-xl text-[10px] font-black tracking-[0.2em] transition-all uppercase"
+          >
+            <Settings size={14} /> Configure
+          </button>
           <div className="flex items-center gap-3 px-4 py-2 bg-black/40 border border-cyber-accent/20 rounded-xl">
             <div className="flex flex-col items-end">
               <span className="text-[10px] text-cyber-neon font-black uppercase tracking-widest">System_Status: Optimal</span>
@@ -1991,6 +2097,206 @@ export default function App() {
 
             <div className="p-4 border-t border-cyan-500/10 bg-black/20 flex justify-end">
               <button onClick={() => setSelectedExternalEndpoint(null)} className="px-6 py-2 bg-cyan-500/10 border border-cyan-500/30 hover:border-cyan-400 hover:text-cyan-400 text-white text-[10px] font-black uppercase tracking-widest transition-all rounded-lg">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showConfig && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-cyber-card border border-cyber-accent/30 rounded-2xl w-full max-w-2xl overflow-hidden shadow-[0_0_50px_rgba(112,0,255,0.2)] max-h-[80vh] flex flex-col">
+            <div className="p-6 border-b border-cyber-accent/20 flex items-center justify-between bg-cyber-accent/5">
+              <div className="flex items-center gap-3">
+                <Settings size={24} className="text-cyber-neon" />
+                <h2 className="text-xl font-black text-white uppercase italic tracking-tighter">Configuration</h2>
+              </div>
+              <button onClick={() => setShowConfig(false)} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                <X size={24} className="text-cyber-accent" />
+              </button>
+            </div>
+            
+            <div className="flex border-b border-cyber-accent/10">
+              <button
+                onClick={() => setConfigTab('appearance')}
+                className={`px-6 py-3 text-[10px] font-black uppercase tracking-wider transition-all ${
+                  configTab === 'appearance' 
+                    ? 'text-cyber-neon border-b-2 border-cyber-neon bg-cyber-neon/5' 
+                    : 'text-cyber-accent/60 hover:text-white'
+                }`}
+              >
+                Appearance
+              </button>
+              <button
+                onClick={() => setConfigTab('users')}
+                className={`px-6 py-3 text-[10px] font-black uppercase tracking-wider transition-all ${
+                  configTab === 'users' 
+                    ? 'text-cyber-neon border-b-2 border-cyber-neon bg-cyber-neon/5' 
+                    : 'text-cyber-accent/60 hover:text-white'
+                }`}
+              >
+                User Management
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1">
+              {configTab === 'appearance' && (
+                <div className="space-y-6">
+                  <div className="space-y-3">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-cyber-accent/60">Appearance</div>
+                    <div className="bg-black/20 border border-cyber-accent/10 rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-bold text-white">Theme</span>
+                        <span className="text-[9px] text-cyber-accent/60 font-black uppercase tracking-widest">{theme.toUpperCase()}</span>
+                      </div>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => handleThemeChange('cyber')}
+                          className={`flex-1 px-4 py-3 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                            theme === 'cyber' 
+                              ? 'bg-cyber-neon/20 text-cyber-neon border border-cyber-neon/30' 
+                              : 'bg-black/40 text-cyber-accent/60 border border-cyber-accent/10 hover:border-cyber-accent/30'
+                          }`}
+                        >
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-[#00ff9d]" />
+                            Cyber
+                          </div>
+                        </button>
+                        <button
+                          onClick={() => handleThemeChange('clean')}
+                          className={`flex-1 px-4 py-3 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                            theme === 'clean' 
+                              ? 'bg-cyber-neon/20 text-cyber-neon border border-cyber-neon/30' 
+                              : 'bg-black/40 text-cyber-accent/60 border border-cyber-accent/10 hover:border-cyber-accent/30'
+                          }`}
+                        >
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-[#0ea5e9]" />
+                            Clean
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-cyber-accent/60">System</div>
+                    <div className="bg-black/20 border border-cyber-accent/10 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold text-white">Auto Refresh</span>
+                        <div className="w-10 h-5 bg-cyber-neon/20 rounded-full relative">
+                          <div className="absolute right-0.5 top-0.5 w-4 h-4 bg-cyber-neon rounded-full" />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold text-white">Notifications</span>
+                        <div className="w-10 h-5 bg-cyber-accent/20 rounded-full relative">
+                          <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-cyber-accent rounded-full" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-cyber-accent/10">
+                    <div className="text-[8px] text-cyber-accent/40 font-mono text-center">
+                      Lattice v1.1.32 • CloudNexus Labs
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {configTab === 'users' && (
+                <div className="space-y-6">
+                  <div className="space-y-3">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-cyber-accent/60">Add New User</div>
+                    <div className="bg-black/20 border border-cyber-accent/10 rounded-xl p-4 space-y-3">
+                      <div className="flex gap-3">
+                        <input
+                          type="text"
+                          placeholder="Username"
+                          value={newUser.username}
+                          onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+                          className="flex-1 bg-black/40 border border-cyber-accent/20 rounded-lg px-3 py-2 text-white text-sm font-black uppercase placeholder-cyber-accent/30"
+                        />
+                        <input
+                          type="password"
+                          placeholder="Password"
+                          value={newUser.password}
+                          onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                          className="flex-1 bg-black/40 border border-cyber-accent/20 rounded-lg px-3 py-2 text-white text-sm font-black uppercase placeholder-cyber-accent/30"
+                        />
+                        <button
+                          onClick={createUser}
+                          className="px-4 py-2 bg-cyber-neon/20 border border-cyber-neon/30 rounded-lg text-[10px] font-black uppercase tracking-wider text-cyber-neon hover:bg-cyber-neon/30 transition-all"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-cyber-accent/60">Existing Users</div>
+                    <div className="space-y-2">
+                      {users.map((user) => (
+                        <div key={user.username} className="bg-black/20 border border-cyber-accent/10 rounded-xl p-4 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-cyber-accent/20 flex items-center justify-center">
+                              <span className="text-[10px] font-black text-cyber-accent">{user.username[0].toUpperCase()}</span>
+                            </div>
+                            <div>
+                              <span className="text-sm font-bold text-white">{user.username}</span>
+                              <span className="text-[9px] text-cyber-accent/60 ml-2 uppercase">({user.role})</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {editingUser === user.username ? (
+                              <>
+                                <input
+                                  type="password"
+                                  placeholder="New password"
+                                  value={userPassword}
+                                  onChange={(e) => setUserPassword(e.target.value)}
+                                  className="bg-black/40 border border-cyber-accent/20 rounded-lg px-3 py-1.5 text-white text-sm font-mono w-32"
+                                />
+                                <button
+                                  onClick={() => updateUserPassword(user.username)}
+                                  className="px-3 py-1.5 bg-cyber-neon/20 border border-cyber-neon/30 rounded-lg text-[9px] font-black uppercase text-cyber-neon"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  onClick={() => { setEditingUser(null); setUserPassword(''); }}
+                                  className="px-3 py-1.5 bg-black/40 border border-cyber-accent/20 rounded-lg text-[9px] font-black uppercase text-cyber-accent"
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => setEditingUser(user.username)}
+                                  className="px-3 py-1.5 bg-cyber-accent/10 border border-cyber-accent/20 rounded-lg text-[9px] font-black uppercase text-cyber-accent hover:text-white hover:border-cyber-accent/40 transition-all"
+                                >
+                                  Change Password
+                                </button>
+                                {user.username !== 'admin' && (
+                                  <button
+                                    onClick={() => deleteUser(user.username)}
+                                    className="px-3 py-1.5 bg-red-500/10 border border-red-500/30 rounded-lg text-[9px] font-black uppercase text-red-500 hover:bg-red-500/20 transition-all"
+                                  >
+                                    Delete
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

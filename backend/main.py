@@ -72,14 +72,76 @@ def create_access_token(data: dict):
 
 AGENT_PASSWORD = os.getenv("AGENT_PASSWORD", "lattice-agent-secret")
 
+# In-memory user store (in production, this would be in the database)
+users_db = {
+    "admin": {"username": "admin", "password": "admin", "role": "admin"},
+}
+
+class UserCreate(BaseModel):
+    username: str
+    password: str
+
+class UserUpdate(BaseModel):
+    password: str
+
+class UserResponse(BaseModel):
+    username: str
+    role: str
+
+@app.post("/api/users", response_model=UserResponse)
+async def create_user(user: UserCreate, token: str = Depends(oauth2_scheme)):
+    if user.username in users_db:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already exists"
+        )
+    users_db[user.username] = {
+        "username": user.username,
+        "password": user.password,
+        "role": "user"
+    }
+    return {"username": user.username, "role": "user"}
+
+@app.get("/api/users", response_model=List[UserResponse])
+async def list_users(token: str = Depends(oauth2_scheme)):
+    return [{"username": u["username"], "role": u["role"]} for u in users_db.values()]
+
+@app.delete("/api/users/{username}")
+async def delete_user(username: str, token: str = Depends(oauth2_scheme)):
+    if username == "admin":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete admin user"
+        )
+    if username not in users_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    del users_db[username]
+    return {"message": "User deleted"}
+
+@app.put("/api/users/{username}")
+async def update_user(username: str, user: UserUpdate, token: str = Depends(oauth2_scheme)):
+    if username not in users_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    users_db[username]["password"] = user.password
+    return {"message": "Password updated"}
+
 @app.post("/api/token", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    if form_data.password != ADMIN_PASSWORD and form_data.password != AGENT_PASSWORD:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    # Check against users_db or agent password
+    user = users_db.get(form_data.username)
+    if not user or user.get("password") != form_data.password:
+        if form_data.password != AGENT_PASSWORD:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
     access_token = create_access_token(data={"sub": form_data.username})
     return {"access_token": access_token, "token_type": "bearer"}
 

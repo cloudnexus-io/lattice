@@ -8,11 +8,25 @@ export default {
     extend: {
       colors: {
         cyber: {
-          dark: '#0a0a0c',
-          card: '#121216',
-          neon: '#00ff9d',
-          accent: '#7000ff',
-          text: '#e2e2e7'
+          dark: 'var(--color-dark)',
+          card: 'var(--color-card)',
+          neon: 'var(--color-neon)',
+          accent: 'var(--color-accent)',
+          text: 'var(--color-text)',
+        },
+        theme: {
+          DEFAULT: {
+            dark: 'var(--color-dark)',
+            card: 'var(--color-card)',
+            neon: 'var(--color-neon)',
+            accent: 'var(--color-accent)',
+            text: 'var(--color-text)',
+          },
+          dark: 'var(--color-dark)',
+          card: 'var(--color-card)',
+          neon: 'var(--color-neon)',
+          accent: 'var(--color-accent)',
+          text: 'var(--color-text)',
         }
       }
     },
